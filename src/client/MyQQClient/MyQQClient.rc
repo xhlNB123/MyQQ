@@ -1,0 +1,107 @@
+// Microsoft Visual C++ 生成的资源脚本。
+#include "resource.h"
+#include <afxres.h>
+#include <windows.h>
+
+// 本文件以 UTF-8 保存，显式告知资源编译器按 UTF-8(65001) 解码，
+// 否则中文系统默认按 GBK(936) 解码会导致中文串被误读 → RC2104。
+#pragma code_page(65001)
+
+#ifdef APSTUDIO_INVOKED
+1 TEXTINCLUDE
+BEGIN
+    "resource.h\0"
+END
+2 TEXTINCLUDE
+BEGIN
+    "#include ""afxres.h""\r\n"
+    "#include ""windows.h""\r\n\0"
+END
+3 TEXTINCLUDE
+BEGIN
+    "\r\n\0"
+END
+#endif    // APSTUDIO_INVOKED
+
+/////////////////////////////////////////////////////////////////////////////
+// 中文(简体，中国) 资源
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
+
+/////////////////////////////////////////////////////////////////////////////
+// 登录对话框
+IDD_LOGIN_DIALOG DIALOGEX 0, 0, 240, 170
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "MyQQ 登录"
+FONT 9, "微软雅黑", 0, 0, 0x1
+BEGIN
+    LTEXT           "账号：",IDC_STATIC,20,20,30,12
+    EDITTEXT        IDC_LOGIN_ACCOUNT,60,18,120,14,ES_AUTOHSCROLL
+    LTEXT           "密码：",IDC_STATIC,20,42,30,12
+    EDITTEXT        IDC_LOGIN_PASSWORD,60,40,120,14,ES_PASSWORD | ES_AUTOHSCROLL
+    LTEXT           "服务器IP：",IDC_STATIC,20,64,40,12
+    EDITTEXT        IDC_LOGIN_SERVER_IP,60,62,80,14,ES_AUTOHSCROLL
+    LTEXT           "端口：",IDC_STATIC,145,64,25,12
+    EDITTEXT        IDC_LOGIN_SERVER_PORT,170,62,40,14,ES_AUTOHSCROLL
+    PUSHBUTTON      "查询本机",IDC_QUERY_LOCAL_BTN,20,86,50,16
+    LTEXT           "",IDC_LOGIN_LOCAL_INFO,78,88,142,12
+    DEFPUSHBUTTON   "登录",IDC_LOGIN_BTN,60,116,55,20
+    PUSHBUTTON      "注册",IDC_REGISTER_BTN,125,116,55,20
+END
+
+/////////////////////////////////////////////////////////////////////////////
+// 注册对话框
+IDD_REGISTER_DIALOG DIALOGEX 0, 0, 220, 150
+STYLE DS_SETFONT | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "MyQQ 注册"
+FONT 9, "微软雅黑", 0, 0, 0x1
+BEGIN
+    LTEXT           "账号：",IDC_STATIC,20,20,40,12
+    EDITTEXT        IDC_REG_ACCOUNT,70,18,120,14,ES_AUTOHSCROLL
+    LTEXT           "密码：",IDC_STATIC,20,42,40,12
+    EDITTEXT        IDC_REG_PASSWORD,70,40,120,14,ES_PASSWORD | ES_AUTOHSCROLL
+    LTEXT           "确认密码：",IDC_STATIC,20,64,45,12
+    EDITTEXT        IDC_REG_PASSWORD2,70,62,120,14,ES_PASSWORD | ES_AUTOHSCROLL
+    LTEXT           "昵称：",IDC_STATIC,20,86,40,12
+    EDITTEXT        IDC_REG_NICKNAME,70,84,120,14,ES_AUTOHSCROLL
+    DEFPUSHBUTTON   "提交注册",IDC_REG_SUBMIT_BTN,70,112,60,20
+    PUSHBUTTON      "取消",IDCANCEL,140,112,50,20
+END
+
+/////////////////////////////////////////////////////////////////////////////
+// 登录后主对话框（好友列表）
+IDD_MAIN_DIALOG DIALOGEX 0, 0, 220, 300
+STYLE DS_SETFONT | DS_CENTER | WS_MINIMIZEBOX | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "MyQQ"
+FONT 9, "微软雅黑", 0, 0, 0x1
+BEGIN
+    LTEXT           "",IDC_MAIN_SELF_INFO,10,8,200,14
+    LTEXT           "查找：",IDC_STATIC,10,28,25,12
+    EDITTEXT        IDC_SEARCH_KEYWORD,40,26,110,14,ES_AUTOHSCROLL
+    PUSHBUTTON      "查找/添加",IDC_SEARCH_BTN,155,25,55,16
+    LTEXT           "好友列表：",IDC_STATIC,10,48,60,12
+    CONTROL         "",IDC_FRIEND_LIST,"SysListView32",LVS_REPORT | LVS_SHOWSELALWAYS | WS_BORDER | WS_TABSTOP,10,62,200,200
+    DEFPUSHBUTTON   "打开聊天",IDC_OPEN_CHAT_BTN,10,272,60,20
+    PUSHBUTTON      "刷新",IDC_REFRESH_BTN,150,272,60,20
+END
+
+/////////////////////////////////////////////////////////////////////////////
+// 聊天对话框
+IDD_CHAT_DIALOG DIALOGEX 0, 0, 300, 240
+STYLE DS_SETFONT | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME
+CAPTION "聊天"
+FONT 9, "微软雅黑", 0, 0, 0x1
+BEGIN
+    EDITTEXT        IDC_CHAT_HISTORY,10,10,280,160,ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY | WS_VSCROLL
+    EDITTEXT        IDC_CHAT_INPUT,10,176,215,42,ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL
+    DEFPUSHBUTTON   "发送",IDC_CHAT_SEND_BTN,232,176,58,42
+END
+
+/////////////////////////////////////////////////////////////////////////////
+// 右键弹出菜单：查询软件版本（登录/聊天窗口右键触发）
+IDR_CONTEXT_MENU MENU
+BEGIN
+    POPUP "菜单"
+    BEGIN
+        MENUITEM "查询软件版本",            ID_SHOW_VERSION
+    END
+END
