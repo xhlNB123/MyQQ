@@ -17,15 +17,24 @@ std::string Pack(const std::string& cmd, const std::vector<std::string>& args) {
 }
 
 std::vector<std::string> Unpack(const std::string& line) {
+    // 先去掉整行末尾的 '\r'/'\n'
+    std::string s = line;
+    while (!s.empty() && (s.back() == '\r' || s.back() == '\n'))
+        s.pop_back();
+
+    // 手动按分隔符切分：保留末尾空字段（getline 会丢掉行尾空字段，
+    // 导致 "A|B|" 只解析出 2 段、"...||" 结尾的空头像/签名字段丢失）。
     std::vector<std::string> tokens;
     std::string field;
-    std::istringstream ss(line);
-    while (std::getline(ss, field, kFieldSep)) {
-        // 去掉行尾可能残留的 '\r' / '\n'
-        while (!field.empty() && (field.back() == '\r' || field.back() == '\n'))
-            field.pop_back();
-        tokens.push_back(field);
+    for (char c : s) {
+        if (c == kFieldSep) {
+            tokens.push_back(field);
+            field.clear();
+        } else {
+            field.push_back(c);
+        }
     }
+    tokens.push_back(field);   // 最后一段（可能为空）
     return tokens;
 }
 
