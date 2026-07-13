@@ -62,6 +62,7 @@
     <ClCompile Include="RegisterDlg.cpp" />
     <ClCompile Include="MainDlg.cpp" />
     <ClCompile Include="ChatDlg.cpp" />
+    <ClCompile Include="ProfileDlg.cpp" />
     <ClCompile Include="..\..\common\Message.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -81,6 +82,7 @@
     <ClInclude Include="RegisterDlg.h" />
     <ClInclude Include="MainDlg.h" />
     <ClInclude Include="ChatDlg.h" />
+    <ClInclude Include="ProfileDlg.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>

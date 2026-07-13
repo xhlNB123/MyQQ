@@ -13,6 +13,7 @@
 #define IDD_REGISTER_DIALOG             201
 #define IDD_MAIN_DIALOG                 202
 #define IDD_CHAT_DIALOG                 203
+#define IDD_PROFILE_DIALOG              204
 
 // ---------------- 登录对话框控件 ----------------
 #define IDC_LOGIN_ACCOUNT               1000
@@ -38,6 +39,17 @@
 #define IDC_SEARCH_BTN                  1203
 #define IDC_OPEN_CHAT_BTN               1204
 #define IDC_REFRESH_BTN                 1205
+#define IDC_PROFILE_BTN                 1206
+
+// ---------------- 个人设置对话框控件 ----------------
+#define IDC_PROFILE_ACCOUNT             1400
+#define IDC_PROFILE_NICKNAME            1401
+#define IDC_PROFILE_GENDER              1402
+#define IDC_PROFILE_STAR                1403
+#define IDC_PROFILE_BLOOD               1404
+#define IDC_PROFILE_SIGNATURE           1405
+#define IDC_PROFILE_AVATAR              1406
+#define IDC_PROFILE_SAVE_BTN            1407
 
 // ---------------- 聊天窗口控件 ----------------
 #define IDC_CHAT_HISTORY                1300
@@ -50,9 +62,9 @@
 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        204
+#define _APS_NEXT_RESOURCE_VALUE        205
 #define _APS_NEXT_COMMAND_VALUE         32772
-#define _APS_NEXT_CONTROL_VALUE         1400
+#define _APS_NEXT_CONTROL_VALUE         1408
 #define _APS_NEXT_SYMED_VALUE           130
 #endif
 #endif

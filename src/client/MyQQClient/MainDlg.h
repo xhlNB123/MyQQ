@@ -23,6 +23,7 @@ protected:
     afx_msg void OnSearch();        // SEARCH|keyword
     afx_msg void OnRefresh();       // FRIEND_LIST|selfId
     afx_msg void OnOpenChat();      // 打开选中好友的聊天窗口
+    afx_msg void OnProfile();       // 打开个人设置窗体
     afx_msg void OnDblClkFriend(NMHDR* pNMHDR, LRESULT* pResult);
     afx_msg LRESULT OnNetMessage(WPARAM w, LPARAM l);
     afx_msg LRESULT OnNetClosed(WPARAM w, LPARAM l);

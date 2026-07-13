@@ -150,6 +150,52 @@ bool Database::AreFriends(int a, int b) {
     return yes;
 }
 
+// ---------------- 个人信息 ----------------
+bool Database::GetProfile(int userId, ProfileInfo& out) {
+    sqlite3_stmt* st = nullptr;
+    sqlite3_prepare_v2(db_,
+        "SELECT UserId,Account,NickName,Gender,"
+        "IFNULL(StarId,0),IFNULL(BloodTypeId,0),"
+        "IFNULL(Signature,''),IFNULL(AvatarPath,'') "
+        "FROM Users WHERE UserId=?;",
+        -1, &st, nullptr);
+    sqlite3_bind_int(st, 1, userId);
+    bool found = false;
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        out.userId      = sqlite3_column_int(st, 0);
+        out.account     = reinterpret_cast<const char*>(sqlite3_column_text(st, 1));
+        out.nickName    = reinterpret_cast<const char*>(sqlite3_column_text(st, 2));
+        out.gender      = sqlite3_column_int(st, 3);
+        out.starId      = sqlite3_column_int(st, 4);
+        out.bloodTypeId = sqlite3_column_int(st, 5);
+        out.signature   = reinterpret_cast<const char*>(sqlite3_column_text(st, 6));
+        out.avatar      = reinterpret_cast<const char*>(sqlite3_column_text(st, 7));
+        found = true;
+    }
+    sqlite3_finalize(st);
+    return found;
+}
+
+bool Database::UpdateProfile(const ProfileInfo& p) {
+    sqlite3_stmt* st = nullptr;
+    sqlite3_prepare_v2(db_,
+        "UPDATE Users SET NickName=?,Gender=?,StarId=?,"
+        "BloodTypeId=?,Signature=?,AvatarPath=? WHERE UserId=?;",
+        -1, &st, nullptr);
+    sqlite3_bind_text(st, 1, p.nickName.c_str(),  -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int (st, 2, p.gender);
+    // 星座/血型为 0 时存 NULL（未设置）
+    if (p.starId > 0) sqlite3_bind_int(st, 3, p.starId); else sqlite3_bind_null(st, 3);
+    if (p.bloodTypeId > 0) sqlite3_bind_int(st, 4, p.bloodTypeId); else sqlite3_bind_null(st, 4);
+    sqlite3_bind_text(st, 5, p.signature.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(st, 6, p.avatar.c_str(),    -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int (st, 7, p.userId);
+    int rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    if (rc != SQLITE_DONE) { lastErr_ = sqlite3_errmsg(db_); return false; }
+    return true;
+}
+
 // ---------------- 消息 ----------------
 long long Database::SaveMessage(int senderId, int receiverId, int typeId,
                                 const std::string& content) {

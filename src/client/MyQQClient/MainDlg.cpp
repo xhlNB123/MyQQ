@@ -4,6 +4,7 @@
 #include "pch.h"
 #include "MainDlg.h"
 #include "ChatDlg.h"
+#include "ProfileDlg.h"
 #include "AppContext.h"
 #include "../../common/Message.h"
 #include "../../common/Protocol.h"
@@ -32,6 +33,7 @@ BEGIN_MESSAGE_MAP(CMainDlg, CDialogEx)
     ON_BN_CLICKED(IDC_SEARCH_BTN,    &CMainDlg::OnSearch)
     ON_BN_CLICKED(IDC_REFRESH_BTN,   &CMainDlg::OnRefresh)
     ON_BN_CLICKED(IDC_OPEN_CHAT_BTN, &CMainDlg::OnOpenChat)
+    ON_BN_CLICKED(IDC_PROFILE_BTN,   &CMainDlg::OnProfile)
     ON_NOTIFY(NM_DBLCLK, IDC_FRIEND_LIST, &CMainDlg::OnDblClkFriend)
     ON_MESSAGE(WM_NET_MESSAGE, &CMainDlg::OnNetMessage)
     ON_MESSAGE(WM_NET_CLOSED,  &CMainDlg::OnNetClosed)
@@ -63,6 +65,19 @@ void CMainDlg::RequestFriendList() {
 }
 
 void CMainDlg::OnRefresh() { RequestFriendList(); }
+
+// 打开个人设置（模态）。ProfileDlg 内部会把网络通知切给自己；
+// 关闭后这里切回主窗口，并按最新昵称刷新标题。
+void CMainDlg::OnProfile() {
+    CProfileDlg dlg(this);
+    dlg.DoModal();
+    g_ctx.net.SetNotifyWnd(GetSafeHwnd());   // 通知目标切回主窗口
+
+    CString title;
+    title.Format(_T("MyQQ - %s (ID:%d)"), U8ToCS(g_ctx.selfNick).GetString(), g_ctx.selfId);
+    SetWindowText(title);
+    RequestFriendList();                     // 昵称可能变了，刷新列表
+}
 
 void CMainDlg::OnSearch() {
     CString kw; GetDlgItemText(IDC_SEARCH_KEYWORD, kw);

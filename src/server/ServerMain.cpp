@@ -100,6 +100,29 @@ static std::string HandleRequest(const std::string& line, TcpSocket* conn, int& 
                 {std::to_string(from), content}));
             return Pack("CHAT_ACK", {"0"});
         }
+        case Cmd::kGetProfile: {                       // GET_PROFILE|userId
+            int uid = (t.size() >= 2) ? atoi(t[1].c_str()) : curUser;
+            ProfileInfo p;
+            if (!g_db.GetProfile(uid, p))
+                return Pack("GET_PROFILE_RESP", {"3", "用户不存在"});
+            return Pack("GET_PROFILE_RESP", {
+                "0", std::to_string(p.userId), p.account, p.nickName,
+                std::to_string(p.gender), std::to_string(p.starId),
+                std::to_string(p.bloodTypeId), p.signature, p.avatar});
+        }
+        case Cmd::kUpdateProfile: {                    // UPDATE_PROFILE|userId|nick|gender|starId|bloodTypeId|signature|avatar
+            if (t.size() < 8) return Pack("UPDATE_PROFILE_RESP", {"1", "参数不足"});
+            ProfileInfo p;
+            p.userId      = atoi(t[1].c_str());
+            p.nickName    = t[2];
+            p.gender      = atoi(t[3].c_str());
+            p.starId      = atoi(t[4].c_str());
+            p.bloodTypeId = atoi(t[5].c_str());
+            p.signature   = t[6];
+            p.avatar      = t[7];
+            bool ok = g_db.UpdateProfile(p);
+            return Pack("UPDATE_PROFILE_RESP", {ok ? "0" : "5", ok ? "" : g_db.LastError()});
+        }
         case Cmd::kVersion:
             return Pack("VERSION_RESP", {kAppVersion});
         case Cmd::kHeartbeat:
