@@ -149,6 +149,8 @@ static void ClientThread(TcpSocket conn) {
 }
 
 int main() {
+    // 控制台按 UTF-8 输出，否则中文提示在 GBK(936) 控制台会显示为乱码
+    SetConsoleOutputCP(65001);
     if (!InitWinsock()) { std::cerr << "WSAStartup failed\n"; return 1; }
 
     std::string schema = ReadFile("database/schema_sqlite.sql");
