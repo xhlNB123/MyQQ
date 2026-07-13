@@ -42,8 +42,25 @@ void CRegisterDlg::DoDataExchange(CDataExchange* pDX) {
 
 BEGIN_MESSAGE_MAP(CRegisterDlg, CDialogEx)
     ON_BN_CLICKED(IDC_REG_SUBMIT_BTN, &CRegisterDlg::OnSubmit)
+    ON_BN_CLICKED(IDC_REG_PWD_EYE,    &CRegisterDlg::OnTogglePwd)
+    ON_BN_CLICKED(IDC_REG_PWD2_EYE,   &CRegisterDlg::OnTogglePwd2)
     ON_MESSAGE(WM_NET_MESSAGE, &CRegisterDlg::OnNetMessage)
 END_MESSAGE_MAP()
+
+// 切换密码框明文/密文：明文时去掉掩码字符，密文时恢复为 ●
+void CRegisterDlg::OnTogglePwd() {
+    m_pwdVisible = !m_pwdVisible;
+    CEdit* p = (CEdit*)GetDlgItem(IDC_REG_PASSWORD);
+    if (p) { p->SetPasswordChar(m_pwdVisible ? 0 : L'●'); p->Invalidate(); }
+    SetDlgItemText(IDC_REG_PWD_EYE, m_pwdVisible ? _T("隐") : _T("显"));
+}
+
+void CRegisterDlg::OnTogglePwd2() {
+    m_pwd2Visible = !m_pwd2Visible;
+    CEdit* p = (CEdit*)GetDlgItem(IDC_REG_PASSWORD2);
+    if (p) { p->SetPasswordChar(m_pwd2Visible ? 0 : L'●'); p->Invalidate(); }
+    SetDlgItemText(IDC_REG_PWD2_EYE, m_pwd2Visible ? _T("隐") : _T("显"));
+}
 
 void CRegisterDlg::OnSubmit() {
     UpdateData(TRUE);

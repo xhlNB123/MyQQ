@@ -24,6 +24,7 @@
 #define IDC_REGISTER_BTN                1005
 #define IDC_QUERY_LOCAL_BTN             1006
 #define IDC_LOGIN_LOCAL_INFO            1007
+#define IDC_LOGIN_PWD_EYE               1008
 
 // ---------------- 注册对话框控件 ----------------
 #define IDC_REG_ACCOUNT                 1100
@@ -31,6 +32,8 @@
 #define IDC_REG_PASSWORD2               1102
 #define IDC_REG_NICKNAME                1103
 #define IDC_REG_SUBMIT_BTN              1104
+#define IDC_REG_PWD_EYE                 1105
+#define IDC_REG_PWD2_EYE                1106
 
 // ---------------- 主窗口控件 ----------------
 #define IDC_MAIN_SELF_INFO              1200

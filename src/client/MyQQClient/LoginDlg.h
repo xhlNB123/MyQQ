@@ -20,6 +20,7 @@ protected:
     afx_msg void OnOpenRegister();   // 打开注册对话框
     afx_msg void OnShowVersion();    // 右键菜单：版本查询
     afx_msg void OnContextMenu(CWnd* pWnd, CPoint point);
+    afx_msg void OnTogglePwd();       // 眼睛按钮：切换密码明文/密文
     // 网络消息回调
     afx_msg LRESULT OnNetMessage(WPARAM w, LPARAM l);
     afx_msg LRESULT OnNetClosed(WPARAM w, LPARAM l);
@@ -29,6 +30,7 @@ private:
     // 确保已连接服务端（读取界面上的 IP/端口）
     bool EnsureConnected();
 
+    bool    m_pwdVisible = false;   // 密码是否明文显示
     CString m_account;
     CString m_password;
     CString m_serverIp;

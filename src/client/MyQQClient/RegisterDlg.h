@@ -15,6 +15,8 @@ protected:
     virtual void DoDataExchange(CDataExchange* pDX) override;
 
     afx_msg void OnSubmit();                       // 提交注册
+    afx_msg void OnTogglePwd();                    // 密码框 显/隐 切换
+    afx_msg void OnTogglePwd2();                   // 确认密码框 显/隐 切换
     afx_msg LRESULT OnNetMessage(WPARAM w, LPARAM l);
     DECLARE_MESSAGE_MAP()
 
@@ -23,4 +25,6 @@ private:
     CString m_password;
     CString m_password2;
     CString m_nickname;
+    bool    m_pwdVisible  = false;   // 密码是否明文显示
+    bool    m_pwd2Visible = false;   // 确认密码是否明文显示
 };

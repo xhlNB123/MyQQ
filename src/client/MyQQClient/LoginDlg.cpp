@@ -40,6 +40,7 @@ BEGIN_MESSAGE_MAP(CLoginDlg, CDialogEx)
     ON_BN_CLICKED(IDC_LOGIN_BTN,       &CLoginDlg::OnLogin)
     ON_BN_CLICKED(IDC_REGISTER_BTN,    &CLoginDlg::OnOpenRegister)
     ON_COMMAND(ID_SHOW_VERSION,        &CLoginDlg::OnShowVersion)
+    ON_BN_CLICKED(IDC_LOGIN_PWD_EYE,   &CLoginDlg::OnTogglePwd)
     ON_WM_CONTEXTMENU()
     ON_MESSAGE(WM_NET_MESSAGE, &CLoginDlg::OnNetMessage)
     ON_MESSAGE(WM_NET_CLOSED,  &CLoginDlg::OnNetClosed)
@@ -60,6 +61,17 @@ void CLoginDlg::OnQueryLocal() {
         m_localInfo = _T("获取本机信息失败");
     }
     UpdateData(FALSE);
+}
+
+// 切换密码明文/密文显示（眼睛按钮）
+void CLoginDlg::OnTogglePwd() {
+    m_pwdVisible = !m_pwdVisible;
+    CEdit* pEdit = (CEdit*)GetDlgItem(IDC_LOGIN_PASSWORD);
+    if (pEdit) {
+        pEdit->SetPasswordChar(m_pwdVisible ? 0 : L'●');
+        pEdit->Invalidate();   // 强制重绘，令新掩码字符立即生效
+    }
+    SetDlgItemText(IDC_LOGIN_PWD_EYE, m_pwdVisible ? _T("隐") : _T("显"));
 }
 
 // 连接服务端（读取界面 IP/端口）
