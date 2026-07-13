@@ -32,4 +32,5 @@ private:
     CString   m_account;
     CString   m_nickname;
     CString   m_signature;
+    bool      m_loaded = false;   // GET_PROFILE 是否已返回并填充（防止未加载就保存清空资料）
 };

@@ -98,16 +98,21 @@ void CProfileDlg::FillProfile(const std::vector<std::string>& t) {
     m_avatar.SetCurSel((an >= 1 && an <= 8) ? an : 0);
 
     UpdateData(FALSE);   // 把 m_account/m_nickname/m_signature 刷到控件
+    m_loaded = true;     // 资料已就绪，允许保存
 }
 
 void CProfileDlg::OnSave() {
+    // 资料还没加载完就保存，会把数据库里的资料清空 —— 直接拦下
+    if (!m_loaded) { AfxMessageBox(_T("资料尚未加载完成，请稍候再保存")); return; }
+
     UpdateData(TRUE);
     // 字段里若含分隔符 '|' 会破坏协议，先挡掉
     if (m_nickname.Find(_T('|')) >= 0 || m_signature.Find(_T('|')) >= 0) {
         AfxMessageBox(_T("昵称和签名不能包含 '|' 字符"));
         return;
     }
-    if (m_nickname.IsEmpty()) { AfxMessageBox(_T("昵称不能为空")); return; }
+    // 昵称留空则默认回退成账号名（不再硬性拦人）
+    if (m_nickname.IsEmpty()) m_nickname = m_account;
 
     int gender  = m_gender.GetCurSel();  if (gender  < 0) gender  = 0;
     int starId  = m_star.GetCurSel();    if (starId  < 0) starId  = 0;  // 索引即 Id

@@ -10,6 +10,16 @@
 #include "../../common/Message.h"
 #include "../../common/Protocol.h"
 
+// UTF-8(std::string) -> CString（服务端中文提示统一 UTF-8，避免乱码）
+static CString U8ToCS(const std::string& s) {
+    if (s.empty()) return CString();
+    int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), nullptr, 0);
+    CStringW w; wchar_t* buf = w.GetBuffer(n);
+    MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), buf, n);
+    w.ReleaseBuffer(n);
+    return CString(w);
+}
+
 CLoginDlg::CLoginDlg(CWnd* pParent)
     : CDialogEx(IDD_LOGIN_DIALOG, pParent) {
     m_serverIp   = _T("127.0.0.1");
@@ -124,7 +134,7 @@ LRESULT CLoginDlg::OnNetMessage(WPARAM, LPARAM lParam) {
             // 登录成功：结束登录框，返回 IDOK，由 App 拉起主窗口
             EndDialog(IDOK);
         } else {
-            CString err = (t.size() > 2) ? CString(t[2].c_str()) : _T("登录失败");
+            CString err = (t.size() > 2) ? U8ToCS(t[2]) : CString(_T("登录失败"));
             AfxMessageBox(err);
         }
     } else if (t[0] == "VERSION_RESP") {

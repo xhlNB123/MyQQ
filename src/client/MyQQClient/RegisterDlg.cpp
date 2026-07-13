@@ -12,6 +12,24 @@
 #include <vector>
 #include <string>
 
+// UTF-8(std::string) <-> CString 互转（与服务端统一用 UTF-8，避免中文乱码）
+static CString U8ToCS(const std::string& s) {
+    if (s.empty()) return CString();
+    int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), nullptr, 0);
+    CStringW w; wchar_t* buf = w.GetBuffer(n);
+    MultiByteToWideChar(CP_UTF8, 0, s.c_str(), (int)s.size(), buf, n);
+    w.ReleaseBuffer(n);
+    return CString(w);
+}
+static std::string CSToU8(const CString& cs) {
+    CStringW w(cs);
+    if (w.IsEmpty()) return std::string();
+    int n = WideCharToMultiByte(CP_UTF8, 0, w, w.GetLength(), nullptr, 0, nullptr, nullptr);
+    std::string s(n, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, w, w.GetLength(), &s[0], n, nullptr, nullptr);
+    return s;
+}
+
 CRegisterDlg::CRegisterDlg(CWnd* pParent) : CDialogEx(IDD, pParent) {}
 
 void CRegisterDlg::DoDataExchange(CDataExchange* pDX) {
@@ -41,12 +59,17 @@ void CRegisterDlg::OnSubmit() {
         AfxMessageBox(_T("尚未连接服务端，请先在登录窗口连接"));
         return;
     }
+    // 账号/昵称里禁止分隔符 '|'（会破坏协议）
+    if (m_account.Find(_T('|')) >= 0 || m_nickname.Find(_T('|')) >= 0) {
+        AfxMessageBox(_T("账号和昵称不能包含 '|' 字符"));
+        return;
+    }
     // 接收通知切到本窗口，收 REGISTER_RESP
     g_ctx.net.SetNotifyWnd(GetSafeHwnd());
 
-    CT2A account(m_account), password(m_password), nick(m_nickname);
+    // 统一用 UTF-8 编码发送（中文昵称不乱码）
     std::string line = myqq::Pack("REGISTER",
-        { std::string(account), std::string(password), std::string(nick) });
+        { CSToU8(m_account), CSToU8(m_password), CSToU8(m_nickname) });
     g_ctx.net.Send(line);
 }
 
@@ -59,12 +82,13 @@ LRESULT CRegisterDlg::OnNetMessage(WPARAM, LPARAM lParam) {
         int status = t.size() > 1 ? atoi(t[1].c_str()) : 1;
         if (status == 0) {
             CString msg;
-            msg.Format(_T("注册成功，你的账号 UserId = %d，请返回登录。"),
+            msg.Format(_T("注册成功！\n你的 QQ 号是 %d（系统分配）。\n")
+                       _T("登录时请使用你刚才填写的\"账号 + 密码\"，不是这串数字。"),
                        t.size() > 2 ? atoi(t[2].c_str()) : 0);
             AfxMessageBox(msg);
             EndDialog(IDOK);
         } else {
-            CString err = t.size() > 2 ? CString(CA2T(t[2].c_str())) : _T("注册失败");
+            CString err = t.size() > 2 ? U8ToCS(t[2]) : CString(_T("注册失败"));
             AfxMessageBox(err);
         }
     }
