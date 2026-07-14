@@ -4,10 +4,10 @@
 
 ## 编译运行
 1. 用 **Visual Studio 2022**（安装「使用 C++ 的桌面开发」+「适用于最新 v143 生成工具的 C++ MFC」组件）打开 `MyQQClient/MyQQClient.sln`。
-2. 选择 `Debug|x64` 或 `Release|x64`，直接生成。工程已把 `../../common/` 下的 `Message.cpp / Socket.cpp / ChatLogger.cpp` 一并纳入编译。
-3. 先启动服务端（`MyQQServer.exe`），再运行客户端：登录框输入服务端**局域网 IP** 和端口 `6000` → 注册 → 登录 → 查找加好友 → 双击好友打开聊天。
+2. 本机开发调试可选 `Debug|x64`；发给其他人必须选 `Release|x64`。工程已把 `../../common/` 下的 `Message.cpp / Socket.cpp / ChatLogger.cpp` 一并纳入编译。
+3. 先启动服务端，再运行客户端：登录框输入服务端**局域网 IP** 和端口 `6000` → 注册 → 登录 → 查找加好友 → 双击好友打开聊天。
 
-> MFC 仅能用 MSVC 编译；本仓库的服务端/控制台客户端可用 MinGW g++ 编译，但本 MFC 客户端**必须用 Visual Studio**。
+> **不要直接发送 Debug exe。** Debug 客户端依赖 `mfc140ud.dll`、`ucrtbased.dll` 等开发机调试 DLL，只会在装有 Visual Studio 的电脑正常运行。正式发布请从仓库根目录运行 `scripts/package-windows-x64.ps1`，使用脚本生成的 `dist/*.zip`；最终用户无需 Visual Studio，也无需打开 `.sln`。详见 `docs/部署与发布说明.md`。
 
 ## 已实现的窗体
 - `CLoginDlg` 登录（含「查询本机主机名/IP」「输入服务端 IP+端口连接」「右键查版本」）

@@ -1,42 +1,56 @@
 #pragma once
-// =====================================================================
-// 聊天窗口 CChatDlg（非模态）
-// 对应 PPT：聊天界面 —— 收发消息 CHAT、显示历史、写聊天记录文件、版本查询
-// =====================================================================
 #include <afxwin.h>
+#include <map>
+#include <memory>
 #include "resource.h"
 #include "../../common/ChatLogger.h"
-#include <memory>
 
 class CMainDlg;
 
+struct ClientChatMessage {
+    long long msgId = 0;
+    int senderId = 0;
+    int receiverId = 0;
+    CString sendTime;
+    CString content;
+};
+
 class CChatDlg : public CDialogEx {
 public:
-    // peerId/peerNick：对方好友；pMain：所属主窗口（关闭时从其表中移除）
     CChatDlg(int peerId, const CString& peerNick, CMainDlg* pMain, CWnd* pParent = nullptr);
-    virtual ~CChatDlg();
+    ~CChatDlg() override;
     enum { IDD = IDD_CHAT_DIALOG };
-
-    int PeerId() const { return m_peerId; }
-    // 由主窗口转发过来的一条对方消息（fromId==m_peerId）
-    void OnIncoming(const CString& content);
-
+    int PeerId() const { return peerId_; }
+    unsigned long long HistoryRequestId() const { return historyRequestId_; }
+    void OnHistoryBegin(unsigned long long requestId, int count);
+    void OnHistoryItem(unsigned long long requestId, const ClientChatMessage& msg);
+    void OnHistoryEnd(unsigned long long requestId, bool hasMore, long long nextCursor);
+    void OnLiveMessage(const ClientChatMessage& msg);
+    void OnChatAck(unsigned long long clientId, int status, long long msgId, const CString& sendTime);
 protected:
-    virtual void DoDataExchange(CDataExchange* pDX) override;
-    virtual BOOL OnInitDialog() override;
-    virtual void PostNcDestroy() override;
-
-    afx_msg void OnSend();                 // CHAT|selfId|peerId|content
-    afx_msg void OnShowVersion();          // 右键菜单：版本查询
-    afx_msg void OnContextMenu(CWnd* pWnd, CPoint point);
+    void DoDataExchange(CDataExchange*) override;
+    BOOL OnInitDialog() override;
+    void PostNcDestroy() override;
+    afx_msg void OnSend();
+    afx_msg void OnLoadOlder();
+    afx_msg void OnShowVersion();
+    afx_msg void OnContextMenu(CWnd*, CPoint);
     afx_msg void OnClose();
     DECLARE_MESSAGE_MAP()
-
 private:
-    void AppendLine(const CString& who, const CString& text);
+    void RequestHistory(long long beforeMsgId);
+    void InsertMessage(const ClientChatMessage& msg, bool logNew);
+    void RenderMessages();
 
-    int      m_peerId;
-    CString  m_peerNick;
-    CMainDlg* m_pMain;
-    std::unique_ptr<myqq::ChatLogger> m_logger;   // 聊天记录写文件
+    int peerId_;
+    CString peerNick_;
+    CMainDlg* main_;
+    std::unique_ptr<myqq::ChatLogger> logger_;
+    bool logWarningShown_ = false;
+    std::map<long long, ClientChatMessage> messages_;
+    std::map<unsigned long long, CString> pendingSends_;
+    unsigned long long historyRequestId_ = 0;
+    unsigned long long nextClientMsgId_ = 0;
+    long long nextBeforeMsgId_ = 0;
+    bool hasMore_ = false;
 };

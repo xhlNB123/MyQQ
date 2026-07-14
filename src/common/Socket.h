@@ -10,6 +10,8 @@
 
 #include <winsock2.h>
 #include <string>
+#include <memory>
+#include <mutex>
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -28,6 +30,10 @@ public:
     TcpSocket();
     explicit TcpSocket(SOCKET s);
     ~TcpSocket();
+    TcpSocket(const TcpSocket&) = delete;
+    TcpSocket& operator=(const TcpSocket&) = delete;
+    TcpSocket(TcpSocket&& other) noexcept;
+    TcpSocket& operator=(TcpSocket&& other) noexcept;
 
     // 客户端：连接远端
     bool Connect(const std::string& ip, unsigned short port);
@@ -47,6 +53,7 @@ public:
 private:
     SOCKET      sock_;
     std::string recvBuf_;   // 粘包/半包处理缓冲
+    std::shared_ptr<std::mutex> sendMutex_;  // 同一连接的响应/推送串行发送
 };
 
 } // namespace myqq

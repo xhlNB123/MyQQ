@@ -35,9 +35,30 @@ bool GetLocalHostInfo(std::string& hostName, std::string& ipv4) {
     return true;
 }
 
-TcpSocket::TcpSocket() : sock_(INVALID_SOCKET) {}
-TcpSocket::TcpSocket(SOCKET s) : sock_(s) {}
-TcpSocket::~TcpSocket() { /* 不在析构里 Close，便于按值返回 */ }
+TcpSocket::TcpSocket()
+    : sock_(INVALID_SOCKET), sendMutex_(std::make_shared<std::mutex>()) {}
+TcpSocket::TcpSocket(SOCKET s)
+    : sock_(s), sendMutex_(std::make_shared<std::mutex>()) {}
+TcpSocket::~TcpSocket() { Close(); }
+
+TcpSocket::TcpSocket(TcpSocket&& other) noexcept
+    : sock_(other.sock_), recvBuf_(std::move(other.recvBuf_)),
+      sendMutex_(std::move(other.sendMutex_)) {
+    other.sock_ = INVALID_SOCKET;
+    if (!sendMutex_) sendMutex_ = std::make_shared<std::mutex>();
+}
+
+TcpSocket& TcpSocket::operator=(TcpSocket&& other) noexcept {
+    if (this != &other) {
+        Close();
+        sock_ = other.sock_;
+        recvBuf_ = std::move(other.recvBuf_);
+        sendMutex_ = std::move(other.sendMutex_);
+        other.sock_ = INVALID_SOCKET;
+        if (!sendMutex_) sendMutex_ = std::make_shared<std::mutex>();
+    }
+    return *this;
+}
 
 void TcpSocket::Close() {
     if (sock_ != INVALID_SOCKET) {
@@ -93,6 +114,7 @@ TcpSocket TcpSocket::Accept() {
 
 bool TcpSocket::SendLine(const std::string& line) {
     if (sock_ == INVALID_SOCKET) return false;
+    std::lock_guard<std::mutex> lock(*sendMutex_);
     size_t total = 0;
     while (total < line.size()) {
         int n = send(sock_, line.data() + total,

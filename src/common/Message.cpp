@@ -6,6 +6,52 @@
 
 namespace myqq {
 
+std::string EncodeWireText(const std::string& input) {
+    static const char alphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    std::string out;
+    out.reserve((input.size() * 4 + 2) / 3);
+    unsigned int value = 0;
+    int bits = -6;
+    for (unsigned char c : input) {
+        value = (value << 8) | c;
+        bits += 8;
+        while (bits >= 0) {
+            out.push_back(alphabet[(value >> bits) & 0x3F]);
+            bits -= 6;
+        }
+    }
+    if (bits > -6) out.push_back(alphabet[((value << 8) >> (bits + 8)) & 0x3F]);
+    return out;
+}
+
+bool DecodeWireText(const std::string& input, std::string& output) {
+    static signed char table[256];
+    static bool initialized = false;
+    if (!initialized) {
+        for (int i = 0; i < 256; ++i) table[i] = -1;
+        const char* alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        for (int i = 0; i < 64; ++i) table[static_cast<unsigned char>(alphabet[i])] = static_cast<signed char>(i);
+        initialized = true;
+    }
+    output.clear();
+    output.reserve(input.size() * 3 / 4);
+    unsigned int value = 0;
+    int bits = -8;
+    for (unsigned char c : input) {
+        int decoded = table[c];
+        if (decoded < 0) return false;
+        value = (value << 6) | static_cast<unsigned int>(decoded);
+        bits += 6;
+        if (bits >= 0) {
+            output.push_back(static_cast<char>((value >> bits) & 0xFF));
+            bits -= 8;
+        }
+    }
+    // Base64URL 无 padding 时，只允许余 0/2/4 bit；长度 mod 4 == 1 非法。
+    return input.size() % 4 != 1;
+}
+
 std::string Pack(const std::string& cmd, const std::vector<std::string>& args) {
     std::string out = cmd;
     for (const auto& a : args) {
@@ -46,9 +92,12 @@ std::string CmdToStr(Cmd cmd) {
         case Cmd::kSearchUser:    return "SEARCH";
         case Cmd::kAddFriend:     return "ADD_FRIEND";
         case Cmd::kFriendList:    return "FRIEND_LIST";
-        case Cmd::kFriendReqAck:  return "FRIEND_ACK";
-        case Cmd::kChat:          return "CHAT";
-        case Cmd::kSysMessage:    return "SYS_MSG";
+        case Cmd::kFriendReqAck:    return "FRIEND_ACK";
+        case Cmd::kFriendSync:      return "FRIEND_SYNC";
+        case Cmd::kFriendResultSeen:return "FRIEND_RESULT_SEEN";
+        case Cmd::kChat:            return "CHAT";
+        case Cmd::kChatHistory:     return "CHAT_HISTORY";
+        case Cmd::kSysMessage:      return "SYS_MSG";
         case Cmd::kGetProfile:    return "GET_PROFILE";
         case Cmd::kUpdateProfile: return "UPDATE_PROFILE";
         case Cmd::kVersion:       return "VERSION";
@@ -64,9 +113,12 @@ Cmd StrToCmd(const std::string& s) {
     if (s == "SEARCH")         return Cmd::kSearchUser;
     if (s == "ADD_FRIEND")     return Cmd::kAddFriend;
     if (s == "FRIEND_LIST")    return Cmd::kFriendList;
-    if (s == "FRIEND_ACK")     return Cmd::kFriendReqAck;
-    if (s == "CHAT")           return Cmd::kChat;
-    if (s == "SYS_MSG")        return Cmd::kSysMessage;
+    if (s == "FRIEND_ACK")        return Cmd::kFriendReqAck;
+    if (s == "FRIEND_SYNC")       return Cmd::kFriendSync;
+    if (s == "FRIEND_RESULT_SEEN")return Cmd::kFriendResultSeen;
+    if (s == "CHAT")              return Cmd::kChat;
+    if (s == "CHAT_HISTORY")      return Cmd::kChatHistory;
+    if (s == "SYS_MSG")           return Cmd::kSysMessage;
     if (s == "GET_PROFILE")    return Cmd::kGetProfile;
     if (s == "UPDATE_PROFILE") return Cmd::kUpdateProfile;
     if (s == "VERSION")        return Cmd::kVersion;

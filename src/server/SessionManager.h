@@ -16,7 +16,7 @@ class SessionManager {
 public:
     // 登记/移除在线用户
     void Bind(int userId, TcpSocket* conn);
-    void Remove(int userId);
+    bool Remove(int userId, TcpSocket* conn);
 
     // 向指定在线用户推送一行消息；用户不在线返回 false
     bool PushTo(int userId, const std::string& line);

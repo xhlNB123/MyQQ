@@ -19,6 +19,14 @@ static CString U8ToCS(const std::string& s) {
     w.ReleaseBuffer(n);
     return CString(w);
 }
+static std::string CSToU8(const CString& cs) {
+    CStringW w(cs);
+    if (w.IsEmpty()) return std::string();
+    int n = WideCharToMultiByte(CP_UTF8, 0, w, w.GetLength(), nullptr, 0, nullptr, nullptr);
+    std::string s(n, '\0');
+    WideCharToMultiByte(CP_UTF8, 0, w, w.GetLength(), &s[0], n, nullptr, nullptr);
+    return s;
+}
 
 CLoginDlg::CLoginDlg(CWnd* pParent)
     : CDialogEx(IDD_LOGIN_DIALOG, pParent) {
@@ -98,19 +106,17 @@ void CLoginDlg::OnLogin() {
     }
     if (!EnsureConnected()) return;
 
-    CStringA acc(m_account), pwd(m_password);
-    std::string line = myqq::Pack("LOGIN", { std::string(acc), std::string(pwd) });
+    std::string line = myqq::Pack("LOGIN", {
+        myqq::EncodeWireText(CSToU8(m_account)), myqq::EncodeWireText(CSToU8(m_password)) });
     g_ctx.net.Send(line);
 }
 
 void CLoginDlg::OnOpenRegister() {
     if (!EnsureConnected()) return;
-    // 注册期间把消息通知目标切给注册对话框
     CRegisterDlg dlg(this);
-    g_ctx.net.SetNotifyWnd(dlg.GetSafeHwnd());  // 占位，真正切换在 dlg 内 OnInitDialog
+    registerDlg_ = &dlg;
     dlg.DoModal();
-    // 注册对话框关闭后，消息通知目标切回登录窗口
-    g_ctx.net.SetNotifyWnd(GetSafeHwnd());
+    registerDlg_ = nullptr;
 }
 
 // 右键菜单：查询软件版本（对应客户端要点⑥）
@@ -128,31 +134,35 @@ void CLoginDlg::OnShowVersion() {
 }
 
 // 处理服务端推送的一行消息
-LRESULT CLoginDlg::OnNetMessage(WPARAM, LPARAM lParam) {
-    std::string* pLine = reinterpret_cast<std::string*>(lParam);
-    if (!pLine) return 0;
-    std::vector<std::string> t = myqq::Unpack(*pLine);
-    delete pLine;
-    if (t.empty()) return 0;
+LRESULT CLoginDlg::OnNetMessage(WPARAM, LPARAM) {
+    for (const auto& line : g_ctx.net.DrainMessages()) HandleLine(line);
+    return 0;
+}
 
+void CLoginDlg::HandleLine(const std::string& line) {
+    std::vector<std::string> t = myqq::Unpack(line);
+    if (t.empty()) return;
+    if (t[0] == "REGISTER_RESP" && registerDlg_ && IsWindow(registerDlg_->GetSafeHwnd())) {
+        registerDlg_->SendMessage(WM_NET_MESSAGE, 0, reinterpret_cast<LPARAM>(new std::string(line)));
+        return;
+    }
     if (t[0] == "LOGIN_RESP") {
         // LOGIN_RESP|status|userId   或   LOGIN_RESP|status|errmsg
         int status = (t.size() > 1) ? atoi(t[1].c_str()) : 1;
         if (status == 0 && t.size() > 2) {
             g_ctx.selfId      = atoi(t[2].c_str());
-            CStringA accA(m_account);
-            g_ctx.selfAccount = std::string(accA);
-            if (g_ctx.selfNick.empty()) g_ctx.selfNick = std::string(accA);
+            g_ctx.selfAccount = CSToU8(m_account);
+            g_ctx.selfNick = g_ctx.selfAccount;
             // 登录成功：结束登录框，返回 IDOK，由 App 拉起主窗口
             EndDialog(IDOK);
         } else {
-            CString err = (t.size() > 2) ? U8ToCS(t[2]) : CString(_T("登录失败"));
+            std::string decoded;
+            CString err = (t.size() > 2 && myqq::DecodeWireText(t[2], decoded)) ? U8ToCS(decoded) : CString(_T("登录失败"));
             AfxMessageBox(err);
         }
     } else if (t[0] == "VERSION_RESP") {
         // 忽略（可显示）
     }
-    return 0;
 }
 
 LRESULT CLoginDlg::OnNetClosed(WPARAM, LPARAM) {

@@ -14,6 +14,9 @@
 #define IDD_MAIN_DIALOG                 202
 #define IDD_CHAT_DIALOG                 203
 #define IDD_PROFILE_DIALOG              204
+#define IDD_SETTINGS_DIALOG             205
+#define IDD_VERIFY_DIALOG               206
+#define IDD_FRIEND_REQUESTS_DIALOG      207
 
 // ---------------- 登录对话框控件 ----------------
 #define IDC_LOGIN_ACCOUNT               1000
@@ -43,6 +46,8 @@
 #define IDC_OPEN_CHAT_BTN               1204
 #define IDC_REFRESH_BTN                 1205
 #define IDC_PROFILE_BTN                 1206
+#define IDC_SETTINGS_BTN                1207
+#define IDC_FRIEND_REQUESTS_BTN         1208
 
 // ---------------- 个人设置对话框控件 ----------------
 #define IDC_PROFILE_ACCOUNT             1400
@@ -58,6 +63,17 @@
 #define IDC_CHAT_HISTORY                1300
 #define IDC_CHAT_INPUT                  1301
 #define IDC_CHAT_SEND_BTN               1302
+#define IDC_CHAT_LOAD_OLDER_BTN         1303
+
+// ---------------- 设置/验证/好友申请 ----------------
+#define IDC_SETTINGS_INFO               1500
+#define IDC_SETTINGS_SWITCH_BTN         1501
+#define IDC_SETTINGS_EXIT_BTN           1502
+#define IDC_VERIFY_TEXT                 1510
+#define IDC_REQUEST_LIST                1520
+#define IDC_REQUEST_DETAIL              1521
+#define IDC_REQUEST_ACCEPT_BTN           1522
+#define IDC_REQUEST_REJECT_BTN           1523
 
 // ---------------- 右键菜单：版本查询 ----------------
 #define IDR_CONTEXT_MENU                300

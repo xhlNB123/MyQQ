@@ -5,7 +5,9 @@
 // =====================================================================
 #include <afxwin.h>
 #include "resource.h"
+#include <string>
 
+class CRegisterDlg;
 class CLoginDlg : public CDialogEx {
 public:
     CLoginDlg(CWnd* pParent = nullptr);
@@ -27,8 +29,9 @@ protected:
     DECLARE_MESSAGE_MAP()
 
 private:
-    // 确保已连接服务端（读取界面上的 IP/端口）
     bool EnsureConnected();
+    void HandleLine(const std::string& line);
+    CRegisterDlg* registerDlg_ = nullptr;
 
     bool    m_pwdVisible = false;   // 密码是否明文显示
     CString m_account;

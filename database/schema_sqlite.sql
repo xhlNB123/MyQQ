@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS Users (
     Gender      INTEGER DEFAULT 0,                   -- 0 未知 1 男 2 女
     StarId      INTEGER,
     BloodTypeId INTEGER,
-    PolicyId    INTEGER DEFAULT 1,
+    PolicyId    INTEGER DEFAULT 2,
     AvatarPath  TEXT,
     Signature   TEXT,
     Status      INTEGER DEFAULT 0,                   -- 0 离线 1 在线 2 忙碌
@@ -57,6 +57,30 @@ CREATE TABLE IF NOT EXISTS Messages (
     SendTime   TEXT DEFAULT (datetime('now','localtime')),
     IsRead     INTEGER DEFAULT 0
 );
+
+-- 好友申请（好友关系只在接受后写入 Friends）
+CREATE TABLE IF NOT EXISTS FriendRequests (
+    RequestId          INTEGER PRIMARY KEY AUTOINCREMENT,
+    SenderId           INTEGER NOT NULL,
+    ReceiverId         INTEGER NOT NULL,
+    VerifyText         TEXT NOT NULL DEFAULT '',
+    Status             INTEGER NOT NULL DEFAULT 0, -- 0 pending / 1 accepted / 2 rejected
+    CreatedTime        TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    HandledTime        TEXT,
+    ResultAcknowledged INTEGER NOT NULL DEFAULT 0,
+    CHECK (SenderId <> ReceiverId),
+    FOREIGN KEY (SenderId) REFERENCES Users(UserId),
+    FOREIGN KEY (ReceiverId) REFERENCES Users(UserId)
+);
+
+CREATE INDEX IF NOT EXISTS IX_Messages_SenderReceiverMsg
+    ON Messages(SenderId, ReceiverId, MsgId);
+CREATE INDEX IF NOT EXISTS IX_Messages_ReceiverSenderMsg
+    ON Messages(ReceiverId, SenderId, MsgId);
+CREATE INDEX IF NOT EXISTS IX_FriendRequests_ReceiverStatus
+    ON FriendRequests(ReceiverId, Status, RequestId);
+CREATE INDEX IF NOT EXISTS IX_FriendRequests_SenderResult
+    ON FriendRequests(SenderId, ResultAcknowledged, Status, RequestId);
 
 -- QQ 号从 10001 起（模拟真实 QQ 号）
 INSERT INTO sqlite_sequence(name, seq)

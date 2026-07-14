@@ -5,21 +5,24 @@
 // =====================================================================
 
 #include <string>
+#include <filesystem>
 
 namespace myqq {
 
 class ChatLogger {
 public:
     // logDir：日志目录（不存在则创建）；selfId/peerId：会话双方 QQ 号
-    ChatLogger(const std::string& logDir, int selfId, int peerId);
+    ChatLogger(const std::filesystem::path& logDir, int selfId, int peerId);
 
-    // 追加一条消息，format: [时间] 发送者昵称: 内容
-    void Append(const std::string& sender, const std::string& content);
+    // 追加一条消息，format: [时间] 发送者昵称: 内容；失败返回 false
+    bool Append(const std::string& sender, const std::string& content);
 
-    const std::string& FilePath() const { return filePath_; }
+    const std::filesystem::path& FilePath() const { return filePath_; }
+    bool IsReady() const { return ready_; }
 
 private:
-    std::string filePath_;
+    std::filesystem::path filePath_;
+    bool ready_ = false;
     static std::string NowString();       // "2026-07-13 11:20:33"
 };
 

@@ -8,7 +8,16 @@
 #   cmake --build . --config Debug
 # =====================================================================
 cmake_minimum_required(VERSION 3.15)
-project(MyQQ LANGUAGES CXX)
+
+# MSVC 发布版统一静态链接 CRT（Release=/MT，Debug=/MTd），
+# 生成的服务端复制到未安装 Visual Studio/VC++ 运行库的机器也能启动。
+if(POLICY CMP0091)
+    cmake_policy(SET CMP0091 NEW)
+endif()
+project(MyQQ LANGUAGES C CXX)
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -24,6 +33,9 @@ add_library(myqq_common
     src/common/ChatLogger.cpp
 )
 target_include_directories(myqq_common PUBLIC src/common)
+if(MSVC)
+    target_compile_options(myqq_common PRIVATE /utf-8)
+endif()
 if(WIN32)
     target_link_libraries(myqq_common PUBLIC ws2_32)
 endif()
@@ -39,7 +51,13 @@ add_executable(MyQQServer
     src/server/SessionManager.cpp
 )
 target_link_libraries(MyQQServer PRIVATE myqq_common sqlite3)
+if(MSVC)
+    target_compile_options(MyQQServer PRIVATE /utf-8)
+endif()
 
 # ---------- 控制台测试客户端 ----------
 add_executable(MyQQConsoleClient src/client/ConsoleClient.cpp)
 target_link_libraries(MyQQConsoleClient PRIVATE myqq_common)
+if(MSVC)
+    target_compile_options(MyQQConsoleClient PRIVATE /utf-8)
+endif()

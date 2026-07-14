@@ -39,9 +39,16 @@
     <PlatformToolset>v143</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
-    <UseOfMfc>Dynamic</UseOfMfc>
+    <UseOfMfc>Static</UseOfMfc>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir Condition="'$(MyQQClientOutDir)'==''">$(SolutionDir)..\..\..\out\build-client-msvc-x64\Release\</OutDir>
+    <IntDir Condition="'$(MyQQClientIntDir)'==''">$(SolutionDir)..\..\..\out\build-client-msvc-x64\obj\</IntDir>
+    <OutDir Condition="'$(MyQQClientOutDir)'!=''">$(MyQQClientOutDir)</OutDir>
+    <IntDir Condition="'$(MyQQClientIntDir)'!=''">$(MyQQClientIntDir)</IntDir>
+    <TargetName>MyQQClient</TargetName>
+  </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <LanguageStandard>stdcpp17</LanguageStandard>
@@ -50,6 +57,11 @@
       <PreprocessorDefinitions>_WIN32_WINNT=0x0601;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <!-- 源文件按 UTF-8 解读，避免中文注释/字符串在 GBK(936) 环境被误解码（C2857/乱码根因） -->
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -63,6 +75,9 @@
     <ClCompile Include="MainDlg.cpp" />
     <ClCompile Include="ChatDlg.cpp" />
     <ClCompile Include="ProfileDlg.cpp" />
+    <ClCompile Include="SettingsDlg.cpp" />
+    <ClCompile Include="VerifyDlg.cpp" />
+    <ClCompile Include="FriendRequestsDlg.cpp" />
     <ClCompile Include="..\..\common\Message.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -83,7 +98,11 @@
     <ClInclude Include="MainDlg.h" />
     <ClInclude Include="ChatDlg.h" />
     <ClInclude Include="ProfileDlg.h" />
+    <ClInclude Include="SettingsDlg.h" />
+    <ClInclude Include="VerifyDlg.h" />
+    <ClInclude Include="FriendRequestsDlg.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="..\..\common\PathUtils.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="MyQQClient.rc" />

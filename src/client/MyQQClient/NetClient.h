@@ -10,6 +10,9 @@
 #include <string>
 #include <thread>
 #include <atomic>
+#include <deque>
+#include <mutex>
+#include <vector>
 #include "../../common/Socket.h"
 
 // 自定义窗口消息：收到一行服务端消息
@@ -30,8 +33,9 @@ public:
     // 发送一行文本协议（内部自动补 '\n'，若已含则不重复）
     bool Send(const std::string& line);
 
-    // 更换消息通知目标窗口（切换窗体时用，如登录成功切到主窗口）
-    void SetNotifyWnd(HWND wnd) { notifyWnd_ = wnd; }
+    // 更换阶段通知窗口；队列中已有消息时立即再次唤醒新窗口。
+    void SetNotifyWnd(HWND wnd);
+    std::vector<std::string> DrainMessages();
 
     void Close();
     bool IsConnected() const { return connected_.load(); }
@@ -43,4 +47,6 @@ private:
     std::thread            recvThread_;
     std::atomic<bool>      connected_;
     std::atomic<HWND>      notifyWnd_;
+    std::mutex             queueMutex_;
+    std::deque<std::string> recvQueue_;
 };

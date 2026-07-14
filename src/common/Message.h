@@ -17,6 +17,10 @@ std::string Pack(const std::string& cmd, const std::vector<std::string>& args);
 // 解包：把一行文本拆成 tokens（首元素为命令名）
 std::vector<std::string> Unpack(const std::string& line);
 
+// 用户文本在协议中使用 Base64URL（UTF-8 字节），避免 | 和换行破坏报文。
+std::string EncodeWireText(const std::string& utf8);
+bool DecodeWireText(const std::string& encoded, std::string& utf8);
+
 // 命令字 <-> 字符串 互转
 std::string   CmdToStr(Cmd cmd);
 Cmd           StrToCmd(const std::string& s);

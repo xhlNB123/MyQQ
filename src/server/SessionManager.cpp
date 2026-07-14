@@ -11,16 +11,23 @@ void SessionManager::Bind(int userId, TcpSocket* conn) {
     online_[userId] = conn;
 }
 
-void SessionManager::Remove(int userId) {
+bool SessionManager::Remove(int userId, TcpSocket* conn) {
     std::lock_guard<std::mutex> lk(mtx_);
-    online_.erase(userId);
+    auto it = online_.find(userId);
+    if (it == online_.end() || it->second != conn) return false;
+    online_.erase(it);
+    return true;
 }
 
 bool SessionManager::PushTo(int userId, const std::string& line) {
-    std::lock_guard<std::mutex> lk(mtx_);
-    auto it = online_.find(userId);
-    if (it == online_.end() || !it->second) return false;
-    return it->second->SendLine(line);
+    TcpSocket* conn = nullptr;
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        auto it = online_.find(userId);
+        if (it == online_.end() || !it->second) return false;
+        conn = it->second;
+    }
+    return conn->SendLine(line);
 }
 
 bool SessionManager::IsOnline(int userId) {

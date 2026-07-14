@@ -6,7 +6,7 @@
 #include "MyQQClientApp.h"
 #include "AppContext.h"
 #include "LoginDlg.h"
-#include "MainDlg.h"
+#include "MainDlg.h" 
 #include "../../common/Socket.h"
 
 // 全局上下文实例
@@ -29,15 +29,21 @@ BOOL CMyQQClientApp::InitInstance()
         return FALSE;
     }
 
-    // 先跑登录框（模态）；登录成功（EndDialog(IDOK)）后再跑主窗口（模态）。
-    // 主窗口内的聊天窗口为非模态子窗口，模态消息循环仍会为其派发消息。
-    {
+    // 登录 → 主窗口循环；主窗口返回“切换账号”时重新显示登录窗口。
+    // 注意：这里不把任何模态对话框设为 m_pMainWnd。否则该窗口 EndDialog 销毁时
+    // MFC 会投递 WM_QUIT，导致紧接着的下一个 DoModal 立即退出（表现为“点登录就结束进程”）。
+    bool running = true;
+    while (running) {
         CLoginDlg login;
-        if (login.DoModal() == IDOK && g_ctx.selfId > 0) {
-            CMainDlg mainDlg;
-            m_pMainWnd = &mainDlg;
-            mainDlg.DoModal();
+        if (login.DoModal() != IDOK || g_ctx.selfId <= 0) break;
+
+        CMainDlg mainDlg;
+        INT_PTR result = mainDlg.DoModal();
+        if (result == ID_MAIN_SWITCH_ACCOUNT) {
+            g_ctx.ResetSessionState();
+            continue;
         }
+        running = false;
     }
 
     // 退出清理

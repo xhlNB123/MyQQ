@@ -4,7 +4,17 @@
 
 当前进度：服务端已接入 **SQLite** 数据库，注册 / 登录 / 好友管理 / 消息持久化 / **在线实时转发** / **个人信息编辑** 全部跑通并通过端到端联调。客户端 5 个窗口（登录 / 注册 / 主窗口 / 聊天 / 个人设置），密码框带「显/隐」切换。
 
-## 三分钟快速自测（单机双开）
+## 发布给其他人
+
+不要发送 `Debug` 客户端或早期 MinGW 服务端。运行以下脚本生成无需 Visual Studio/MFC/MinGW 的 Windows x64 Release 压缩包：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-windows-x64.ps1
+```
+
+最终文件位于 `dist/MyQQ-1.0.0-windows-x64.zip`。接收方完整解压后，先运行 `server/Start-Server.cmd`，再运行 `client/MyQQClient.exe`，**不需要打开 `.sln`**。详见 [部署与发布说明](docs/部署与发布说明.md)。
+
+## 三分钟快速自测（源码开发环境）
 
 在一台机器上就能验证全部核心功能，无需第二台电脑：
 

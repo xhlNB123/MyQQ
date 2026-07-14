@@ -76,17 +76,11 @@ void CRegisterDlg::OnSubmit() {
         AfxMessageBox(_T("尚未连接服务端，请先在登录窗口连接"));
         return;
     }
-    // 账号/昵称里禁止分隔符 '|'（会破坏协议）
-    if (m_account.Find(_T('|')) >= 0 || m_nickname.Find(_T('|')) >= 0) {
-        AfxMessageBox(_T("账号和昵称不能包含 '|' 字符"));
-        return;
-    }
-    // 接收通知切到本窗口，收 REGISTER_RESP
-    g_ctx.net.SetNotifyWnd(GetSafeHwnd());
-
-    // 统一用 UTF-8 编码发送（中文昵称不乱码）
-    std::string line = myqq::Pack("REGISTER",
-        { CSToU8(m_account), CSToU8(m_password), CSToU8(m_nickname) });
+    // 用户文本统一 Base64URL 编码，登录窗口会把 REGISTER_RESP 转发进来
+    std::string line = myqq::Pack("REGISTER", {
+        myqq::EncodeWireText(CSToU8(m_account)),
+        myqq::EncodeWireText(CSToU8(m_password)),
+        myqq::EncodeWireText(CSToU8(m_nickname)) });
     g_ctx.net.Send(line);
 }
 
@@ -105,7 +99,8 @@ LRESULT CRegisterDlg::OnNetMessage(WPARAM, LPARAM lParam) {
             AfxMessageBox(msg);
             EndDialog(IDOK);
         } else {
-            CString err = t.size() > 2 ? U8ToCS(t[2]) : CString(_T("注册失败"));
+            std::string decoded;
+            CString err = (t.size() > 2 && myqq::DecodeWireText(t[2], decoded)) ? U8ToCS(decoded) : CString(_T("注册失败"));
             AfxMessageBox(err);
         }
     }

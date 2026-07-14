@@ -4,14 +4,18 @@
 #include "ChatLogger.h"
 #include <fstream>
 #include <ctime>
-#include <direct.h>   // _mkdir
 
 namespace myqq {
 
-ChatLogger::ChatLogger(const std::string& logDir, int selfId, int peerId) {
-    _mkdir(logDir.c_str());   // 已存在则忽略
-    filePath_ = logDir + "/chat_" + std::to_string(selfId)
-              + "_" + std::to_string(peerId) + ".txt";
+ChatLogger::ChatLogger(const std::filesystem::path& logDir, int selfId, int peerId) {
+    std::error_code ec;
+    std::filesystem::create_directories(logDir, ec);
+    filePath_ = logDir / ("chat_" + std::to_string(selfId)
+                       + "_" + std::to_string(peerId) + ".txt");
+    if (ec) return;
+
+    std::ofstream probe(filePath_, std::ios::app);
+    ready_ = static_cast<bool>(probe);
 }
 
 std::string ChatLogger::NowString() {
@@ -23,10 +27,15 @@ std::string ChatLogger::NowString() {
     return buf;
 }
 
-void ChatLogger::Append(const std::string& sender, const std::string& content) {
+bool ChatLogger::Append(const std::string& sender, const std::string& content) {
+    if (!ready_) return false;
     std::ofstream ofs(filePath_, std::ios::app);
-    if (!ofs) return;
+    if (!ofs) {
+        ready_ = false;
+        return false;
+    }
     ofs << "[" << NowString() << "] " << sender << ": " << content << "\n";
+    return static_cast<bool>(ofs);
 }
 
 } // namespace myqq

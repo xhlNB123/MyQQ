@@ -44,7 +44,7 @@ CREATE TABLE Users (
     Gender      TINYINT       DEFAULT 0,             -- 0 未知 1 男 2 女
     StarId      INT           NULL,
     BloodTypeId INT           NULL,
-    PolicyId    INT           DEFAULT 1,             -- 好友添加策略
+    PolicyId    INT           DEFAULT 2,             -- 好友添加策略（默认需验证）
     AvatarPath  NVARCHAR(200) NULL,                  -- 头像
     Signature   NVARCHAR(200) NULL,                  -- 个性签名
     Status      TINYINT       DEFAULT 0,             -- 0 离线 1 在线 2 忙碌
@@ -79,4 +79,19 @@ CREATE TABLE Messages (
     CONSTRAINT FK_Msg_Sender   FOREIGN KEY (SenderId)   REFERENCES Users(UserId),
     CONSTRAINT FK_Msg_Receiver FOREIGN KEY (ReceiverId) REFERENCES Users(UserId),
     CONSTRAINT FK_Msg_Type     FOREIGN KEY (TypeId)     REFERENCES MessageType(TypeId)
+);
+
+-- ---------- 好友申请表（好友关系仅在接受后写入 Friends）----------
+CREATE TABLE FriendRequests (
+    RequestId          INT IDENTITY(1,1) PRIMARY KEY,
+    SenderId           INT            NOT NULL,
+    ReceiverId         INT            NOT NULL,
+    VerifyText         NVARCHAR(200)  NOT NULL DEFAULT N'',
+    Status             TINYINT        NOT NULL DEFAULT 0,   -- 0 待处理 1 接受 2 拒绝
+    CreatedTime        DATETIME       NOT NULL DEFAULT GETDATE(),
+    HandledTime        DATETIME       NULL,
+    ResultAcknowledged BIT            NOT NULL DEFAULT 0,
+    CONSTRAINT CK_FR_NotSelf CHECK (SenderId <> ReceiverId),
+    CONSTRAINT FK_FR_Sender   FOREIGN KEY (SenderId)   REFERENCES Users(UserId),
+    CONSTRAINT FK_FR_Receiver FOREIGN KEY (ReceiverId) REFERENCES Users(UserId)
 );

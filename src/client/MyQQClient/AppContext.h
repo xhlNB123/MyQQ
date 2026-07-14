@@ -13,7 +13,16 @@ struct AppContext {
     std::string selfNick;       // 昵称
     std::string serverIp;       // 已连接的服务端 IP
     unsigned short serverPort = 0;
+
+    void ResetSessionState() {
+        selfId = 0;
+        selfAccount.clear();
+        selfNick.clear();
+    }
 };
+
+const INT_PTR ID_MAIN_SWITCH_ACCOUNT = 101;
+const INT_PTR ID_MAIN_EXIT_APP = 102;
 
 // 定义在 MyQQClientApp.cpp
 extern AppContext g_ctx;

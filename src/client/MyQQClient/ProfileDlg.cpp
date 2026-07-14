@@ -55,7 +55,7 @@ END_MESSAGE_MAP()
 
 BOOL CProfileDlg::OnInitDialog() {
     CDialogEx::OnInitDialog();
-    SetWindowText(_T("个人设置"));
+    SetWindowText(_T("个性化设置"));
 
     // 下拉框填充：索引 0 = 未设置，其余按字典 Id 排列
     m_gender.AddString(_T("未知"));
@@ -71,22 +71,23 @@ BOOL CProfileDlg::OnInitDialog() {
     m_avatar.AddString(_T("(无)"));
     for (int i = 1; i <= 8; ++i) { CString a; a.Format(_T("头像%d"), i); m_avatar.AddString(a); }
 
-    // 接收通知切到本窗口，然后拉取当前资料
-    g_ctx.net.SetNotifyWnd(GetSafeHwnd());
-    g_ctx.net.Send(Pack("GET_PROFILE", { std::to_string(g_ctx.selfId) }));
+    // 主窗口是登录阶段唯一网络 owner，会将资料响应转发到本对话框。
     return TRUE;
 }
 
 // GET_PROFILE_RESP|status|userId|account|nick|gender|starId|bloodTypeId|signature|avatar
 void CProfileDlg::FillProfile(const std::vector<std::string>& t) {
     if (t.size() < 10 || t[1] != "0") return;
-    m_account   = U8ToCS(t[3]);
-    m_nickname  = U8ToCS(t[4]);
+    std::string account, nick, signature, avatarText;
+    if (!DecodeWireText(t[3], account) || !DecodeWireText(t[4], nick)
+        || !DecodeWireText(t[8], signature) || !DecodeWireText(t[9], avatarText)) return;
+    m_account   = U8ToCS(account);
+    m_nickname  = U8ToCS(nick);
     int gender  = atoi(t[5].c_str());
     int starId  = atoi(t[6].c_str());
     int bloodId = atoi(t[7].c_str());
-    m_signature = U8ToCS(t[8]);
-    CString avatar = U8ToCS(t[9]);
+    m_signature = U8ToCS(signature);
+    CString avatar = U8ToCS(avatarText);
 
     m_gender.SetCurSel((gender >= 0 && gender <= 2) ? gender : 0);
     m_star.SetCurSel((starId >= 1 && starId <= 12) ? starId : 0);   // 索引=Id，0=未设置
@@ -121,13 +122,12 @@ void CProfileDlg::OnSave() {
     std::string avatar = (avatarN >= 1) ? ("avatar_" + std::to_string(avatarN)) : "";
 
     g_ctx.net.Send(Pack("UPDATE_PROFILE", {
-        std::to_string(g_ctx.selfId),
-        CSToU8(m_nickname),
+        EncodeWireText(CSToU8(m_nickname)),
         std::to_string(gender),
         std::to_string(starId),
         std::to_string(bloodId),
-        CSToU8(m_signature),
-        avatar
+        EncodeWireText(CSToU8(m_signature)),
+        EncodeWireText(avatar)
     }));
 }
 

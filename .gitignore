@@ -1,5 +1,9 @@
 # 构建产物
 /build/
+/out/
+/dist/
+/out-script-test/
+/dist-script-test/
 *.exe
 *.obj
 *.o

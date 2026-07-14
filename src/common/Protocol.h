@@ -20,23 +20,26 @@ enum class Cmd {
     kUnknown = 0,
 
     // 账号
-    kRegister,        // REGISTER|account|password|nickname
-    kLogin,           // LOGIN|account|password
-    kLogout,          // LOGOUT|userId
+    kRegister,        // REGISTER|accountB64|passwordB64|nicknameB64
+    kLogin,           // LOGIN|accountB64|passwordB64
+    kLogout,          // LOGOUT
 
     // 好友
-    kSearchUser,      // SEARCH|keyword                （按账号/昵称查找）
-    kAddFriend,       // ADD_FRIEND|fromId|toId|verify
-    kFriendList,      // FRIEND_LIST|userId
-    kFriendReqAck,    // FRIEND_ACK|reqId|accept(0/1)
+    kSearchUser,        // SEARCH|keywordB64
+    kAddFriend,         // ADD_FRIEND|targetId|verifyB64
+    kFriendList,        // FRIEND_LIST
+    kFriendReqAck,      // FRIEND_ACK|requestId|accept(0/1)
+    kFriendSync,        // FRIEND_SYNC
+    kFriendResultSeen,  // FRIEND_RESULT_SEEN|requestId
 
     // 消息
-    kChat,            // CHAT|fromId|toId|content
-    kSysMessage,      // SYS_MSG|toId|content
+    kChat,              // CHAT|targetId|clientMsgId|contentB64
+    kChatHistory,       // CHAT_HISTORY|peerId|beforeMsgId|limit|requestId
+    kSysMessage,        // 兼容旧系统消息
 
     // 个人信息
-    kGetProfile,      // GET_PROFILE|userId
-    kUpdateProfile,   // UPDATE_PROFILE|userId|field=value;...
+    kGetProfile,      // GET_PROFILE
+    kUpdateProfile,   // UPDATE_PROFILE|nickB64|gender|starId|bloodId|signatureB64|avatarB64
 
     // 系统
     kVersion,         // VERSION
