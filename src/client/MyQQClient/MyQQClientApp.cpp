@@ -3,14 +3,17 @@
 // 负责拉起主窗口。整个进程共享一个 AppContext（含网络连接）。
 // =====================================================================
 #include "pch.h"
+#include <gdiplus.h>
 #include "MyQQClientApp.h"
 #include "AppContext.h"
 #include "LoginDlg.h"
-#include "MainDlg.h" 
+#include "MainDlg.h"
 #include "../../common/Socket.h"
+#pragma comment(lib, "gdiplus.lib")
 
 // 全局上下文实例
 AppContext g_ctx;
+static ULONG_PTR g_gdiplusToken = 0;
 
 CMyQQClientApp theApp;
 
@@ -22,6 +25,10 @@ CMyQQClientApp::CMyQQClientApp() {}
 BOOL CMyQQClientApp::InitInstance()
 {
     CWinApp::InitInstance();
+
+    // 初始化 GDI+（图片缩略图/预览用）
+    Gdiplus::GdiplusStartupInput gdiIn;
+    Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiIn, nullptr);
 
     // 初始化 Winsock（整个进程一次）
     if (!myqq::InitWinsock()) {
@@ -49,6 +56,7 @@ BOOL CMyQQClientApp::InitInstance()
     // 退出清理
     g_ctx.net.Close();
     myqq::CleanupWinsock();
+    if (g_gdiplusToken) Gdiplus::GdiplusShutdown(g_gdiplusToken);
 
     // 所有窗口已关闭，结束程序
     return FALSE;

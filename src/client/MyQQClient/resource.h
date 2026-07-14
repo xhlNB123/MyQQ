@@ -64,6 +64,8 @@
 #define IDC_CHAT_INPUT                  1301
 #define IDC_CHAT_SEND_BTN               1302
 #define IDC_CHAT_LOAD_OLDER_BTN         1303
+#define IDC_CHAT_SEND_IMAGE_BTN         1304
+#define IDC_CHAT_SEND_FILE_BTN          1305
 
 // ---------------- 设置/验证/好友申请 ----------------
 #define IDC_SETTINGS_INFO               1500

@@ -40,6 +40,20 @@ struct MessageInfo {
     std::string content;
     std::string sendTime;
     int isRead = 0;
+    // 文件/图片消息：kind 0文本 1图片 2文件
+    int kind = 0;
+    long long fileId = 0;
+    std::string fileName;
+    long long fileSize = 0;
+};
+
+struct FileRecord {
+    long long fileId = 0;
+    int ownerId = 0;
+    std::string fileName;
+    long long fileSize = 0;
+    int kind = 0;
+    std::string storePath;
 };
 
 struct FriendRequestInfo {
@@ -98,6 +112,16 @@ public:
     bool GetProfile(int userId, ProfileInfo& out);
     // 更新个人资料（昵称/性别/星座/血型/签名/头像）；成功 true
     bool UpdateProfile(const ProfileInfo& p);
+
+    // ---------- 文件/图片 ----------
+    // 建文件记录，返回 fileId(>0) 或 0；同时回填 storePath
+    long long CreateFileRecord(int ownerId, const std::string& fileName,
+                               long long fileSize, int kind,
+                               const std::string& storePath);
+    bool GetFileRecord(long long fileId, FileRecord& out);
+    // 存文件/图片消息（TypeId=5 图片/6 文件），返回 msgId(>0) 或 0
+    long long SaveFileMessage(int senderId, int receiverId, int kind,
+                              long long fileId, const std::string& caption);
 
     // ---------- 消息 ----------
     // 存一条消息，返回 msgId(>0) 或 0

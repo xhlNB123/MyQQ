@@ -73,6 +73,17 @@ CREATE TABLE IF NOT EXISTS FriendRequests (
     FOREIGN KEY (ReceiverId) REFERENCES Users(UserId)
 );
 
+-- 文件/图片存储（Messages.FileId 关联）
+CREATE TABLE IF NOT EXISTS Files (
+    FileId     INTEGER PRIMARY KEY AUTOINCREMENT,
+    OwnerId    INTEGER NOT NULL,
+    FileName   TEXT NOT NULL,
+    FileSize   INTEGER NOT NULL,
+    Kind       INTEGER NOT NULL,          -- 1 图片 2 文件
+    StorePath  TEXT NOT NULL,
+    CreatedTime TEXT DEFAULT (datetime('now','localtime'))
+);
+
 CREATE INDEX IF NOT EXISTS IX_Messages_SenderReceiverMsg
     ON Messages(SenderId, ReceiverId, MsgId);
 CREATE INDEX IF NOT EXISTS IX_Messages_ReceiverSenderMsg
@@ -100,4 +111,5 @@ INSERT OR IGNORE INTO FriendshipPolicy (PolicyId, PolicyName) VALUES
  (1,'允许任何人添加'),(2,'需要验证信息'),(3,'拒绝任何人添加');
 
 INSERT OR IGNORE INTO MessageType (TypeId, TypeName) VALUES
- (1,'文本消息'),(2,'系统消息'),(3,'好友请求'),(4,'好友请求回执');
+ (1,'文本消息'),(2,'系统消息'),(3,'好友请求'),(4,'好友请求回执'),
+ (5,'图片消息'),(6,'文件消息');

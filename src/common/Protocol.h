@@ -14,6 +14,13 @@ const unsigned short kDefaultPort = 6000;
 // 单条消息最大长度（字节）
 const int kMaxPacketSize = 4096;
 
+// 文件传输：单文件上限 20MB；每块原始字节（base64 后约 2.7KB，整行 < kMaxPacketSize）
+const long long kMaxFileBytes = 20LL * 1024 * 1024;
+const int kFileChunkBytes = 2048;
+
+// 消息 kind：0 文本 1 图片 2 文件
+enum MsgKind { kKindText = 0, kKindImage = 1, kKindFile = 2 };
+
 // ---------------- 命令字（Command）----------------
 // 请求：客户端 -> 服务端
 enum class Cmd {
@@ -36,6 +43,12 @@ enum class Cmd {
     kChat,              // CHAT|targetId|clientMsgId|contentB64
     kChatHistory,       // CHAT_HISTORY|peerId|beforeMsgId|limit|requestId
     kSysMessage,        // 兼容旧系统消息
+
+    // 文件/图片传输（分块）
+    kFileBegin,         // FILE_BEGIN|peerId|clientMsgId|kind|nameB64|totalBytes
+    kFileChunk,         // FILE_CHUNK|fileId|seq|dataB64
+    kFileEnd,           // FILE_END|fileId
+    kFileGet,           // FILE_GET|fileId|requestId
 
     // 个人信息
     kGetProfile,      // GET_PROFILE

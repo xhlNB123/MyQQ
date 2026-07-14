@@ -11,6 +11,8 @@
 #include <string>
 #include <thread>
 #include <filesystem>
+#include <map>
+#include <memory>
 
 #include "../common/Socket.h"
 #include "../common/PathUtils.h"
@@ -23,6 +25,27 @@ using namespace myqq;
 
 static Database       g_db;
 static SessionManager g_sessions;
+static std::filesystem::path g_filesDir;   // 文件落盘目录 server/data/files
+
+// 进行中的上传会话
+struct UploadState {
+    long long fileId = 0;
+    int       kind = 0;
+    int       peerId = 0;
+    std::string clientMsgId;
+    std::string fileName;
+    long long expected = 0;
+    long long received = 0;
+    int       nextSeq = 0;
+    std::ofstream ofs;
+    std::filesystem::path path;
+};
+
+// 每个连接的状态：登录用户 + 上传会话表
+struct ConnCtx {
+    int curUser = 0;
+    std::map<std::string, std::shared_ptr<UploadState>> uploads;   // token -> 上传状态
+};
 
 // 读取整个文件内容（建表脚本）
 static std::string ReadFile(const std::filesystem::path& path) {
@@ -42,8 +65,17 @@ static std::string AuthError(const char* response) {
     return Pack(response, {"2", EncodeWireText("请先登录")});
 }
 
-// 处理单条请求。curUser：本连接已登录的 userId（0 表示未登录，可被回写）。
-static std::string HandleRequest(const std::string& line, TcpSocket* conn, int& curUser) {
+// 统一构造 CHAT_PUSH / CHAT_HISTORY_ITEM 的文件相关字段：
+// ...|timeB64|kind|contentB64|fileId|nameB64|size
+static std::vector<std::string> MsgTail(const MessageInfo& m) {
+    return { EncodeWireText(m.sendTime), std::to_string(m.kind),
+             EncodeWireText(m.content), std::to_string(m.fileId),
+             EncodeWireText(m.fileName), std::to_string(m.fileSize) };
+}
+
+// 处理单条请求。ctx.curUser：本连接已登录的 userId（0 表示未登录，可被回写）。
+static std::string HandleRequest(const std::string& line, TcpSocket* conn, ConnCtx& ctx) {
+    int& curUser = ctx.curUser;
     if (line.size() > kMaxPacketSize) return Pack("ERR", {"1", EncodeWireText("报文过长")});
     auto t = Unpack(line);
     if (t.empty()) return Pack("ERR", {"1", EncodeWireText("空报文")});
@@ -155,8 +187,9 @@ static std::string HandleRequest(const std::string& line, TcpSocket* conn, int& 
             long long id = g_db.SaveMessage(curUser, to, 1, content);
             MessageInfo m;
             if (!id || !g_db.GetMessageById(id, m)) return Pack("CHAT_ACK", {"5", clientId, EncodeWireText(g_db.LastError())});
-            g_sessions.PushTo(to, Pack("CHAT_PUSH", {std::to_string(m.msgId), std::to_string(curUser),
-                std::to_string(to), EncodeWireText(m.sendTime), EncodeWireText(content)}));
+            std::vector<std::string> push = {std::to_string(m.msgId), std::to_string(curUser), std::to_string(to)};
+            for (auto& s : MsgTail(m)) push.push_back(s);
+            g_sessions.PushTo(to, Pack("CHAT_PUSH", push));
             return Pack("CHAT_ACK", {"0", clientId, std::to_string(m.msgId), EncodeWireText(m.sendTime)});
         }
         case Cmd::kChatHistory: {
@@ -167,12 +200,104 @@ static std::string HandleRequest(const std::string& line, TcpSocket* conn, int& 
             if (!g_db.AreFriends(curUser, peer)) return Pack("CHAT_HISTORY_BEGIN", {"3", requestId, std::to_string(peer), "0"});
             auto messages = g_db.GetConversation(curUser, peer, before, limit);
             conn->SendLine(Pack("CHAT_HISTORY_BEGIN", {"0", requestId, std::to_string(peer), std::to_string(messages.size())}));
-            for (auto& m : messages) conn->SendLine(Pack("CHAT_HISTORY_ITEM", {requestId,
-                std::to_string(m.msgId), std::to_string(m.senderId), std::to_string(m.receiverId),
-                EncodeWireText(m.sendTime), EncodeWireText(m.content)}));
+            for (auto& m : messages) {
+                std::vector<std::string> item = {requestId, std::to_string(m.msgId),
+                    std::to_string(m.senderId), std::to_string(m.receiverId)};
+                for (auto& s : MsgTail(m)) item.push_back(s);
+                conn->SendLine(Pack("CHAT_HISTORY_ITEM", item));
+            }
             bool more = !messages.empty() && static_cast<int>(messages.size()) >= (limit > 50 ? 50 : limit);
             return Pack("CHAT_HISTORY_END", {requestId, more ? "1" : "0",
                 messages.empty() ? "0" : std::to_string(messages.front().msgId)});
+        }
+        case Cmd::kFileBegin: {                        // FILE_BEGIN|peerId|token|kind|nameB64|totalBytes
+            if (!curUser) return AuthError("FILE_BEGIN_ACK");
+            std::string token = t.size() > 2 ? t[2] : "0";
+            if (t.size() < 6) return Pack("FILE_BEGIN_ACK", {token, "1"});
+            int peer = atoi(t[1].c_str());
+            int kind = atoi(t[3].c_str());
+            std::string name;
+            long long total = _atoi64(t[5].c_str());
+            if (!DecodeField(t, 4, name, 260) || name.empty() ||
+                (kind != kKindImage && kind != kKindFile) ||
+                total <= 0 || total > kMaxFileBytes || !g_db.AreFriends(curUser, peer))
+                return Pack("FILE_BEGIN_ACK", {token, "1"});
+            auto st = std::make_shared<UploadState>();
+            st->kind = kind; st->peerId = peer;
+            st->clientMsgId = token; st->fileName = name; st->expected = total;
+            // 先落临时文件，FILE_END 成功后再建 Files 记录
+            st->path = g_filesDir / ("tmp_" + std::to_string(curUser) + "_" + token);
+            st->ofs.open(st->path, std::ios::binary | std::ios::trunc);
+            if (!st->ofs) return Pack("FILE_BEGIN_ACK", {token, "5"});
+            ctx.uploads[token] = st;
+            return Pack("FILE_BEGIN_ACK", {token, "0"});
+        }
+        case Cmd::kFileChunk: {                        // FILE_CHUNK|token|seq|dataB64（无回执）
+            if (!curUser || t.size() < 4) return std::string();
+            auto it = ctx.uploads.find(t[1]);
+            if (it == ctx.uploads.end()) return std::string();
+            auto st = it->second;
+            std::string data;
+            if (atoi(t[2].c_str()) != st->nextSeq || !DecodeWireText(t[3], data) ||
+                st->received + (long long)data.size() > st->expected) {
+                st->ofs.close(); std::error_code ec; std::filesystem::remove(st->path, ec);
+                ctx.uploads.erase(it);
+                return std::string();
+            }
+            st->ofs.write(data.data(), data.size());
+            st->received += data.size();
+            st->nextSeq++;
+            return std::string();   // 分块不回执，减少往返
+        }
+        case Cmd::kFileEnd: {                          // FILE_END|token
+            if (!curUser || t.size() < 2) return Pack("FILE_DONE", {"0", "1"});
+            std::string token = t[1];
+            auto it = ctx.uploads.find(token);
+            if (it == ctx.uploads.end()) return Pack("FILE_DONE", {token, "3"});
+            auto st = it->second;
+            st->ofs.close();
+            if (st->received != st->expected) {
+                std::error_code ec; std::filesystem::remove(st->path, ec); ctx.uploads.erase(it);
+                return Pack("FILE_DONE", {token, "1"});
+            }
+            // StorePath 存空串；实际文件固定在 g_filesDir/<fileId>，FILE_GET 按 fileId 定位
+            long long fileId = g_db.CreateFileRecord(curUser, st->fileName, st->expected, st->kind, "");
+            if (!fileId) { std::error_code ec; std::filesystem::remove(st->path, ec); ctx.uploads.erase(it); return Pack("FILE_DONE", {token, "5"}); }
+            std::filesystem::path finalPath = g_filesDir / std::to_string(fileId);
+            std::error_code ec; std::filesystem::rename(st->path, finalPath, ec);
+            if (ec) { std::filesystem::remove(st->path, ec); ctx.uploads.erase(it); return Pack("FILE_DONE", {token, "5"}); }
+            int peer = st->peerId, kind = st->kind; std::string fname = st->fileName;
+            ctx.uploads.erase(it);
+            long long msgId = g_db.SaveFileMessage(curUser, peer, kind, fileId, fname);
+            MessageInfo m;
+            if (!msgId || !g_db.GetMessageById(msgId, m)) return Pack("FILE_DONE", {token, "5"});
+            std::vector<std::string> push = {std::to_string(m.msgId), std::to_string(curUser), std::to_string(m.receiverId)};
+            for (auto& s : MsgTail(m)) push.push_back(s);
+            g_sessions.PushTo(m.receiverId, Pack("CHAT_PUSH", push));
+            return Pack("FILE_DONE", {token, "0", std::to_string(m.msgId), EncodeWireText(m.sendTime)});
+        }
+        case Cmd::kFileGet: {                          // FILE_GET|fileId|requestId
+            if (!curUser) return AuthError("FILE_DATA_BEGIN");
+            if (t.size() < 3) return Pack("FILE_DATA_BEGIN", {"0", "1"});
+            long long fileId = _atoi64(t[1].c_str());
+            std::string reqId = t[2];
+            FileRecord fr;
+            if (!g_db.GetFileRecord(fileId, fr))
+                return Pack("FILE_DATA_BEGIN", {reqId, "3"});
+            std::ifstream ifs(fr.storePath.empty() ? (g_filesDir / std::to_string(fileId)) : std::filesystem::path(fr.storePath), std::ios::binary);
+            if (!ifs) return Pack("FILE_DATA_BEGIN", {reqId, "3"});
+            conn->SendLine(Pack("FILE_DATA_BEGIN", {reqId, "0", std::to_string(fr.kind),
+                EncodeWireText(fr.fileName), std::to_string(fr.fileSize)}));
+            std::vector<char> buf(kFileChunkBytes);
+            int seq = 0;
+            while (ifs) {
+                ifs.read(buf.data(), buf.size());
+                std::streamsize n = ifs.gcount();
+                if (n <= 0) break;
+                conn->SendLine(Pack("FILE_DATA_CHUNK", {reqId, std::to_string(seq++),
+                    EncodeWireText(std::string(buf.data(), (size_t)n))}));
+            }
+            return Pack("FILE_DATA_END", {reqId, "0"});
         }
         case Cmd::kGetProfile: {
             if (!curUser) return AuthError("GET_PROFILE_RESP");
@@ -199,15 +324,22 @@ static std::string HandleRequest(const std::string& line, TcpSocket* conn, int& 
 
 // 每个客户端一个线程
 static void ClientThread(TcpSocket conn) {
-    int curUser = 0;
+    ConnCtx ctx;
     std::string line;
     while (conn.RecvLine(line)) {
-        std::string resp = HandleRequest(line, &conn, curUser);
+        std::string resp = HandleRequest(line, &conn, ctx);
         if (!conn.SendLine(resp)) break;
     }
-    if (curUser > 0) {
-        if (g_sessions.Remove(curUser, &conn)) g_db.SetStatus(curUser, 0);
-        std::cout << "[server] user " << curUser << " 下线\n";
+    // 清理未完成的上传临时文件
+    for (auto& kv : ctx.uploads) {
+        if (kv.second) {
+            kv.second->ofs.close();
+            std::error_code ec; std::filesystem::remove(kv.second->path, ec);
+        }
+    }
+    if (ctx.curUser > 0) {
+        if (g_sessions.Remove(ctx.curUser, &conn)) g_db.SetStatus(ctx.curUser, 0);
+        std::cout << "[server] user " << ctx.curUser << " 下线\n";
     }
     conn.Close();
 }
@@ -226,7 +358,9 @@ int main() {
         schemaPath = serverDir / L"database" / L"schema_sqlite.sql";
         dataDir = serverDir / L"data";
         dbPath = dataDir / L"myqq.db";
+        g_filesDir = dataDir / L"files";
         std::filesystem::create_directories(dataDir);
+        std::filesystem::create_directories(g_filesDir);
     } catch (const std::exception& e) {
         std::cerr << "[server] 初始化运行目录失败: " << e.what() << "\n";
         CleanupWinsock();

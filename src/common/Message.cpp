@@ -98,6 +98,10 @@ std::string CmdToStr(Cmd cmd) {
         case Cmd::kChat:            return "CHAT";
         case Cmd::kChatHistory:     return "CHAT_HISTORY";
         case Cmd::kSysMessage:      return "SYS_MSG";
+        case Cmd::kFileBegin:       return "FILE_BEGIN";
+        case Cmd::kFileChunk:       return "FILE_CHUNK";
+        case Cmd::kFileEnd:         return "FILE_END";
+        case Cmd::kFileGet:         return "FILE_GET";
         case Cmd::kGetProfile:    return "GET_PROFILE";
         case Cmd::kUpdateProfile: return "UPDATE_PROFILE";
         case Cmd::kVersion:       return "VERSION";
@@ -119,6 +123,10 @@ Cmd StrToCmd(const std::string& s) {
     if (s == "CHAT")              return Cmd::kChat;
     if (s == "CHAT_HISTORY")      return Cmd::kChatHistory;
     if (s == "SYS_MSG")           return Cmd::kSysMessage;
+    if (s == "FILE_BEGIN")        return Cmd::kFileBegin;
+    if (s == "FILE_CHUNK")        return Cmd::kFileChunk;
+    if (s == "FILE_END")          return Cmd::kFileEnd;
+    if (s == "FILE_GET")          return Cmd::kFileGet;
     if (s == "GET_PROFILE")    return Cmd::kGetProfile;
     if (s == "UPDATE_PROFILE") return Cmd::kUpdateProfile;
     if (s == "VERSION")        return Cmd::kVersion;

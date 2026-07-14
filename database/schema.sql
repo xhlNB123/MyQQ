@@ -76,9 +76,22 @@ CREATE TABLE Messages (
     Content     NVARCHAR(2000) NOT NULL,
     SendTime    DATETIME      DEFAULT GETDATE(),
     IsRead      BIT           DEFAULT 0,
+    FileId      INT           NULL,                 -- 图片/文件消息关联 Files
     CONSTRAINT FK_Msg_Sender   FOREIGN KEY (SenderId)   REFERENCES Users(UserId),
     CONSTRAINT FK_Msg_Receiver FOREIGN KEY (ReceiverId) REFERENCES Users(UserId),
     CONSTRAINT FK_Msg_Type     FOREIGN KEY (TypeId)     REFERENCES MessageType(TypeId)
+);
+
+-- ---------- 文件/图片存储表 ----------
+CREATE TABLE Files (
+    FileId      INT IDENTITY(1,1) PRIMARY KEY,
+    OwnerId     INT            NOT NULL,             -- 上传者
+    FileName    NVARCHAR(260)  NOT NULL,
+    FileSize    BIGINT         NOT NULL,
+    Kind        TINYINT        NOT NULL,             -- 1 图片 2 文件
+    StorePath   NVARCHAR(400)  NOT NULL,             -- 服务端落盘路径
+    CreateTime  DATETIME       DEFAULT GETDATE(),
+    CONSTRAINT FK_Files_Owner FOREIGN KEY (OwnerId) REFERENCES Users(UserId)
 );
 
 -- ---------- 好友申请表（好友关系仅在接受后写入 Friends）----------

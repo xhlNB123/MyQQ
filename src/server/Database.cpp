@@ -3,6 +3,7 @@
 // =====================================================================
 #include "Database.h"
 #include "../../third_party/sqlite/sqlite3.h"
+#include "../common/Protocol.h"
 #include <algorithm>
 
 namespace myqq {
@@ -20,7 +21,10 @@ bool Database::Open(const std::string& dbPath, const std::string& schemaSql) {
     sqlite3_busy_timeout(db_, 5000);
     // schema 内使用 IF NOT EXISTS，可同时承担旧数据库的表/索引迁移。
     if (!Exec(schemaSql)) return false;
-    Exec("PRAGMA user_version=2;");
+    // 旧库迁移：Messages.FileId 列（列已存在会报错，忽略）。
+    sqlite3_exec(db_, "ALTER TABLE Messages ADD COLUMN FileId INTEGER;",
+                 nullptr, nullptr, nullptr);
+    Exec("PRAGMA user_version=3;");
     return true;
 }
 
@@ -358,9 +362,70 @@ bool Database::UpdateProfile(const ProfileInfo& p) {
     return true;
 }
 
+// ---------------- 文件/图片 ----------------
+long long Database::CreateFileRecord(int ownerId, const std::string& fileName,
+                                     long long fileSize, int kind,
+                                     const std::string& storePath) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    sqlite3_stmt* st = nullptr;
+    sqlite3_prepare_v2(db_,
+        "INSERT INTO Files(OwnerId,FileName,FileSize,Kind,StorePath) VALUES(?,?,?,?,?);",
+        -1, &st, nullptr);
+    sqlite3_bind_int  (st, 1, ownerId);
+    sqlite3_bind_text (st, 2, fileName.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(st, 3, fileSize);
+    sqlite3_bind_int  (st, 4, kind);
+    sqlite3_bind_text (st, 5, storePath.c_str(), -1, SQLITE_TRANSIENT);
+    int rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    if (rc != SQLITE_DONE) { lastErr_ = sqlite3_errmsg(db_); return 0; }
+    return sqlite3_last_insert_rowid(db_);
+}
+
+bool Database::GetFileRecord(long long fileId, FileRecord& out) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    sqlite3_stmt* st = nullptr;
+    sqlite3_prepare_v2(db_,
+        "SELECT FileId,OwnerId,FileName,FileSize,Kind,StorePath FROM Files WHERE FileId=?;",
+        -1, &st, nullptr);
+    sqlite3_bind_int64(st, 1, fileId);
+    bool found = false;
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        out.fileId = sqlite3_column_int64(st, 0);
+        out.ownerId = sqlite3_column_int(st, 1);
+        out.fileName = reinterpret_cast<const char*>(sqlite3_column_text(st, 2));
+        out.fileSize = sqlite3_column_int64(st, 3);
+        out.kind = sqlite3_column_int(st, 4);
+        out.storePath = reinterpret_cast<const char*>(sqlite3_column_text(st, 5));
+        found = true;
+    }
+    sqlite3_finalize(st);
+    return found;
+}
+
+long long Database::SaveFileMessage(int senderId, int receiverId, int kind,
+                                    long long fileId, const std::string& caption) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
+    int typeId = (kind == kKindImage) ? 5 : 6;
+    sqlite3_stmt* st = nullptr;
+    sqlite3_prepare_v2(db_,
+        "INSERT INTO Messages(SenderId,ReceiverId,TypeId,Content,FileId) VALUES(?,?,?,?,?);",
+        -1, &st, nullptr);
+    sqlite3_bind_int  (st, 1, senderId);
+    sqlite3_bind_int  (st, 2, receiverId);
+    sqlite3_bind_int  (st, 3, typeId);
+    sqlite3_bind_text (st, 4, caption.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(st, 5, fileId);
+    int rc = sqlite3_step(st);
+    sqlite3_finalize(st);
+    if (rc != SQLITE_DONE) { lastErr_ = sqlite3_errmsg(db_); return 0; }
+    return sqlite3_last_insert_rowid(db_);
+}
+
 // ---------------- 消息 ----------------
 long long Database::SaveMessage(int senderId, int receiverId, int typeId,
                                 const std::string& content) {
+    std::lock_guard<std::recursive_mutex> lock(mutex_);
     sqlite3_stmt* st = nullptr;
     sqlite3_prepare_v2(db_,
         "INSERT INTO Messages(SenderId,ReceiverId,TypeId,Content) VALUES(?,?,?,?);",
@@ -375,22 +440,44 @@ long long Database::SaveMessage(int senderId, int receiverId, int typeId,
     return sqlite3_last_insert_rowid(db_);
 }
 
+// TypeId -> kind：5 图片=1，6 文件=2，其它=0 文本
+static int TypeIdToKind(int typeId) {
+    if (typeId == 5) return kKindImage;
+    if (typeId == 6) return kKindFile;
+    return kKindText;
+}
+
+// 读取一行 Messages+Files 联表结果到 MessageInfo（列顺序见 SQL）
+static void ReadMessageRow(sqlite3_stmt* st, MessageInfo& m) {
+    m.msgId = sqlite3_column_int64(st, 0);
+    m.senderId = sqlite3_column_int(st, 1);
+    m.receiverId = sqlite3_column_int(st, 2);
+    m.typeId = sqlite3_column_int(st, 3);
+    const unsigned char* c = sqlite3_column_text(st, 4);
+    m.content = c ? reinterpret_cast<const char*>(c) : "";
+    c = sqlite3_column_text(st, 5);
+    m.sendTime = c ? reinterpret_cast<const char*>(c) : "";
+    m.isRead = sqlite3_column_int(st, 6);
+    m.fileId = sqlite3_column_int64(st, 7);
+    c = sqlite3_column_text(st, 8);
+    m.fileName = c ? reinterpret_cast<const char*>(c) : "";
+    m.fileSize = sqlite3_column_int64(st, 9);
+    m.kind = TypeIdToKind(m.typeId);
+}
+
+static const char* kMsgSelect =
+    "SELECT m.MsgId,m.SenderId,m.ReceiverId,m.TypeId,m.Content,m.SendTime,m.IsRead,"
+    "IFNULL(m.FileId,0),IFNULL(f.FileName,''),IFNULL(f.FileSize,0) "
+    "FROM Messages m LEFT JOIN Files f ON f.FileId=m.FileId ";
+
 bool Database::GetMessageById(long long msgId, MessageInfo& out) {
     std::lock_guard<std::recursive_mutex> lock(mutex_);
     sqlite3_stmt* st = nullptr;
-    sqlite3_prepare_v2(db_,
-        "SELECT MsgId,SenderId,ReceiverId,TypeId,Content,SendTime,IsRead FROM Messages WHERE MsgId=?;",
-        -1, &st, nullptr);
+    std::string sql = std::string(kMsgSelect) + "WHERE m.MsgId=?;";
+    sqlite3_prepare_v2(db_, sql.c_str(), -1, &st, nullptr);
     sqlite3_bind_int64(st, 1, msgId);
     bool found = false;
-    if (sqlite3_step(st) == SQLITE_ROW) {
-        out.msgId = sqlite3_column_int64(st, 0);
-        out.senderId = sqlite3_column_int(st, 1); out.receiverId = sqlite3_column_int(st, 2);
-        out.typeId = sqlite3_column_int(st, 3);
-        out.content = reinterpret_cast<const char*>(sqlite3_column_text(st, 4));
-        out.sendTime = reinterpret_cast<const char*>(sqlite3_column_text(st, 5));
-        out.isRead = sqlite3_column_int(st, 6); found = true;
-    }
+    if (sqlite3_step(st) == SQLITE_ROW) { ReadMessageRow(st, out); found = true; }
     sqlite3_finalize(st); return found;
 }
 
@@ -400,21 +487,18 @@ std::vector<MessageInfo> Database::GetConversation(int userId, int peerId,
     std::vector<MessageInfo> out;
     if (limit < 1) limit = 1; if (limit > 50) limit = 50;
     sqlite3_stmt* st = nullptr;
-    sqlite3_prepare_v2(db_,
-        "SELECT MsgId,SenderId,ReceiverId,TypeId,Content,SendTime,IsRead FROM Messages "
-        "WHERE TypeId=1 AND ((SenderId=? AND ReceiverId=?) OR (SenderId=? AND ReceiverId=?)) "
-        "AND (?=0 OR MsgId<?) ORDER BY MsgId DESC LIMIT ?;", -1, &st, nullptr);
+    std::string sql = std::string(kMsgSelect) +
+        "WHERE m.TypeId IN (1,5,6) AND ((m.SenderId=? AND m.ReceiverId=?) OR (m.SenderId=? AND m.ReceiverId=?)) "
+        "AND (?=0 OR m.MsgId<?) ORDER BY m.MsgId DESC LIMIT ?;";
+    sqlite3_prepare_v2(db_, sql.c_str(), -1, &st, nullptr);
     sqlite3_bind_int(st, 1, userId); sqlite3_bind_int(st, 2, peerId);
     sqlite3_bind_int(st, 3, peerId); sqlite3_bind_int(st, 4, userId);
     sqlite3_bind_int64(st, 5, beforeMsgId); sqlite3_bind_int64(st, 6, beforeMsgId);
     sqlite3_bind_int(st, 7, limit);
     while (sqlite3_step(st) == SQLITE_ROW) {
         MessageInfo m;
-        m.msgId = sqlite3_column_int64(st, 0); m.senderId = sqlite3_column_int(st, 1);
-        m.receiverId = sqlite3_column_int(st, 2); m.typeId = sqlite3_column_int(st, 3);
-        m.content = reinterpret_cast<const char*>(sqlite3_column_text(st, 4));
-        m.sendTime = reinterpret_cast<const char*>(sqlite3_column_text(st, 5));
-        m.isRead = sqlite3_column_int(st, 6); out.push_back(m);
+        ReadMessageRow(st, m);
+        out.push_back(m);
     }
     sqlite3_finalize(st);
     std::reverse(out.begin(), out.end());

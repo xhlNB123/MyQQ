@@ -7,8 +7,8 @@
 #include "resource.h"
 #include "AppContext.h"
 #include "FriendRequestsDlg.h"
+#include "ChatDlg.h"
 
-class CChatDlg;
 class CProfileDlg;
 
 class CMainDlg : public CDialogEx {
@@ -36,8 +36,7 @@ private:
     void HandleLine(const std::string& line);
     void RequestFriendList();
     void OpenChatWith(int friendId, const CString& nick);
-    void DeliverChat(long long msgId, int fromId, int toId,
-                     const CString& sendTime, const CString& text);
+    void DeliverChat(const ClientChatMessage& m);
     int SelectedFriendId();
     CString SelectedFriendNick();
     void UpdateRequestButton();

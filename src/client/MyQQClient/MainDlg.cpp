@@ -14,6 +14,19 @@ static CString U82CS(const std::string& s){ if(s.empty())return{};int n=MultiByt
 static std::string CS2U8M(const CString& c){CStringW w(c);if(w.IsEmpty())return{};int n=WideCharToMultiByte(CP_UTF8,0,w,w.GetLength(),nullptr,0,nullptr,nullptr);std::string s(n,'\0');WideCharToMultiByte(CP_UTF8,0,w,w.GetLength(),&s[0],n,nullptr,nullptr);return s;}
 static CString DecodeCS(const std::string& e){std::string s;return DecodeWireText(e,s)?U82CS(s):CString();}
 
+// 从 t[base]... 解析：msgId|from|to|timeB64|kind|contentB64|fileId|nameB64|size
+static void FillMsgFromTail(ClientChatMessage& m,const std::vector<std::string>& t,size_t base){
+    m.msgId=_atoi64(t[base].c_str());
+    m.senderId=atoi(t[base+1].c_str());
+    m.receiverId=atoi(t[base+2].c_str());
+    m.sendTime=DecodeCS(t[base+3]);
+    m.kind=atoi(t[base+4].c_str());
+    m.content=DecodeCS(t[base+5]);
+    m.fileId=_atoi64(t[base+6].c_str());
+    m.fileName=DecodeCS(t[base+7]);
+    m.fileSize=_atoi64(t[base+8].c_str());
+}
+
 CMainDlg::CMainDlg(CWnd* p):CDialogEx(IDD_MAIN_DIALOG,p){}
 CMainDlg::~CMainDlg(){}
 void CMainDlg::DoDataExchange(CDataExchange* pDX){CDialogEx::DoDataExchange(pDX);DDX_Control(pDX,IDC_FRIEND_LIST,friendList_);}
@@ -66,13 +79,23 @@ void CMainDlg::HandleLine(const std::string& line){
  else if(c=="FRIEND_REQUEST_PUSH"&&t.size()>=7){long long rid=_atoi64(t[1].c_str());bool exists=false;for(auto&r:friendRequests_)if(r.requestId==rid)exists=true;if(!exists){ClientFriendRequest r;r.requestId=rid;r.senderId=atoi(t[2].c_str());r.senderAccount=DecodeCS(t[3]);r.senderNick=DecodeCS(t[4]);r.verifyText=DecodeCS(t[5]);r.createdTime=DecodeCS(t[6]);friendRequests_.push_back(r);UpdateRequestButton();}}
  else if(c=="FRIEND_ACK_RESP"&&t.size()>=3){long long rid=_atoi64(t[2].c_str());if(t[1]=="0"){friendRequests_.erase(std::remove_if(friendRequests_.begin(),friendRequests_.end(),[&](const ClientFriendRequest&r){return r.requestId==rid;}),friendRequests_.end());UpdateRequestButton();RequestFriendList();if(requestsDlg_&&IsWindow(requestsDlg_->GetSafeHwnd()))requestsDlg_->EndDialog(IDOK);}else AfxMessageBox(_T("处理好友申请失败"));}
  else if(c=="FRIEND_RESULT_PUSH"&&t.size()>=6){CString nick=DecodeCS(t[3]);CString msg;msg.Format(t[4]=="1"?_T("%s 已接受你的好友申请"):_T("%s 已拒绝你的好友申请"),nick.GetString());AfxMessageBox(msg);g_ctx.net.Send(Pack("FRIEND_RESULT_SEEN",{t[1]}));if(t[4]=="1")RequestFriendList();}
- else if(c=="CHAT_PUSH"&&t.size()>=6){ClientChatMessage m;m.msgId=_atoi64(t[1].c_str());m.senderId=atoi(t[2].c_str());m.receiverId=atoi(t[3].c_str());m.sendTime=DecodeCS(t[4]);m.content=DecodeCS(t[5]);DeliverChat(m.msgId,m.senderId,m.receiverId,m.sendTime,m.content);}
+ else if(c=="CHAT_PUSH"&&t.size()>=10){ClientChatMessage m;FillMsgFromTail(m,t,1);DeliverChat(m);}
  else if(c=="CHAT_ACK"&&t.size()>=3){unsigned long long cid=_strtoui64(t[2].c_str(),nullptr,10);for(auto&p:chatWnds_)p.second->OnChatAck(cid,atoi(t[1].c_str()),t.size()>3?_atoi64(t[3].c_str()):0,t.size()>4?DecodeCS(t[4]):CString());}
  else if(c=="CHAT_HISTORY_BEGIN"&&t.size()>=5){auto id=_strtoui64(t[2].c_str(),nullptr,10);int peer=atoi(t[3].c_str());auto it=chatWnds_.find(peer);if(it!=chatWnds_.end())it->second->OnHistoryBegin(id,atoi(t[4].c_str()));}
- else if(c=="CHAT_HISTORY_ITEM"&&t.size()>=7){auto req=_strtoui64(t[1].c_str(),nullptr,10);ClientChatMessage m;m.msgId=_atoi64(t[2].c_str());m.senderId=atoi(t[3].c_str());m.receiverId=atoi(t[4].c_str());m.sendTime=DecodeCS(t[5]);m.content=DecodeCS(t[6]);for(auto&p:chatWnds_)if(p.second->HistoryRequestId()==req)p.second->OnHistoryItem(req,m);}
+ else if(c=="CHAT_HISTORY_ITEM"&&t.size()>=10){auto req=_strtoui64(t[1].c_str(),nullptr,10);ClientChatMessage m;FillMsgFromTail(m,t,2);for(auto&p:chatWnds_)if(p.second->HistoryRequestId()==req)p.second->OnHistoryItem(req,m);}
  else if(c=="CHAT_HISTORY_END"&&t.size()>=4){auto req=_strtoui64(t[1].c_str(),nullptr,10);for(auto&p:chatWnds_)if(p.second->HistoryRequestId()==req)p.second->OnHistoryEnd(req,t[2]=="1",_atoi64(t[3].c_str()));}
+ else if(c=="FILE_BEGIN_ACK"&&t.size()>=3){for(auto&p:chatWnds_)p.second->OnFileBeginAck(CString(t[1].c_str()),atoi(t[2].c_str()));}
+ else if(c=="FILE_DONE"&&t.size()>=3){for(auto&p:chatWnds_)p.second->OnFileDone(CString(t[1].c_str()),atoi(t[2].c_str()),t.size()>3?_atoi64(t[3].c_str()):0,t.size()>4?DecodeCS(t[4]):CString());}
+ else if(c=="FILE_DATA_BEGIN"&&t.size()>=3){CString rq(t[1].c_str());int st=atoi(t[2].c_str());for(auto&p:chatWnds_)p.second->OnFileDataBegin(rq,st,t.size()>3?atoi(t[3].c_str()):0,t.size()>4?DecodeCS(t[4]):CString(),t.size()>5?_atoi64(t[5].c_str()):0);}
+ else if(c=="FILE_DATA_CHUNK"&&t.size()>=4){CString rq(t[1].c_str());std::string d;DecodeWireText(t[3],d);for(auto&p:chatWnds_)p.second->OnFileDataChunk(rq,d);}
+ else if(c=="FILE_DATA_END"&&t.size()>=2){CString rq(t[1].c_str());for(auto&p:chatWnds_)p.second->OnFileDataEnd(rq);}
  else if(c=="GET_PROFILE_RESP"||c=="UPDATE_PROFILE_RESP"){if(profileDlg_&&IsWindow(profileDlg_->GetSafeHwnd()))profileDlg_->SendMessage(WM_NET_MESSAGE,0,(LPARAM)new std::string(line));}
  else if(c=="LOGOUT_RESP"&&logoutPending_)FinishLogout(logoutResult_);
 }
-void CMainDlg::DeliverChat(long long id,int from,int to,const CString& time,const CString& text){int peer=from==g_ctx.selfId?to:from;auto it=chatWnds_.find(peer);if(it==chatWnds_.end()){OpenChatWith(peer,_T(""));it=chatWnds_.find(peer);}ClientChatMessage m;m.msgId=id;m.senderId=from;m.receiverId=to;m.sendTime=time;m.content=text;it->second->OnLiveMessage(m);}
+void CMainDlg::DeliverChat(const ClientChatMessage& m){
+    int peer = m.senderId==g_ctx.selfId ? m.receiverId : m.senderId;
+    auto it=chatWnds_.find(peer);
+    if(it==chatWnds_.end()){OpenChatWith(peer,_T(""));it=chatWnds_.find(peer);}
+    if(it!=chatWnds_.end()) it->second->OnLiveMessage(m);
+}
 void CMainDlg::OnDestroy(){CloseChatWindows();CDialogEx::OnDestroy();}
