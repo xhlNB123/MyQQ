@@ -28,6 +28,8 @@ static CString HumanSize(long long n){
 
 CChatDlg::CChatDlg(int peerId, const CString& peerNick, CMainDlg* main, CWnd* parent)
     : CDialogEx(IDD_CHAT_DIALOG,parent), peerId_(peerId), peerNick_(peerNick), main_(main) {}
+CChatDlg::CChatDlg(int groupId, const CString& groupName, CMainDlg* main, bool, CWnd* parent)
+    : CDialogEx(IDD_CHAT_DIALOG,parent), peerId_(groupId), peerNick_(groupName), main_(main), isGroup_(true) {}
 CChatDlg::~CChatDlg(){ for(auto& p:thumbs_) if(p.second) DeleteObject(p.second); }
 void CChatDlg::DoDataExchange(CDataExchange* pDX){ CDialogEx::DoDataExchange(pDX); DDX_Control(pDX,IDC_CHAT_HISTORY,msgList_); }
 
@@ -35,6 +37,7 @@ BEGIN_MESSAGE_MAP(CChatDlg,CDialogEx)
     ON_BN_CLICKED(IDC_CHAT_SEND_BTN,&CChatDlg::OnSend)
     ON_BN_CLICKED(IDC_CHAT_SEND_IMAGE_BTN,&CChatDlg::OnSendImage)
     ON_BN_CLICKED(IDC_CHAT_SEND_FILE_BTN,&CChatDlg::OnSendFile)
+    ON_BN_CLICKED(IDC_CHAT_MEMBERS_BTN,&CChatDlg::OnMembers)
     ON_BN_CLICKED(IDC_CHAT_LOAD_OLDER_BTN,&CChatDlg::OnLoadOlder)
     ON_LBN_DBLCLK(IDC_CHAT_HISTORY,&CChatDlg::OnDblClkList)
     ON_COMMAND(ID_SHOW_VERSION,&CChatDlg::OnShowVersion)
@@ -46,8 +49,15 @@ END_MESSAGE_MAP()
 
 BOOL CChatDlg::OnInitDialog(){
     CDialogEx::OnInitDialog();
-    CString title; title.Format(_T("与 %s (ID:%d) 聊天中"),peerNick_.GetString(),peerId_); SetWindowText(title);
-    try { logger_=std::make_unique<ChatLogger>(ExecutableDirectory()/L"logs",g_ctx.selfId,peerId_); } catch(...){}
+    CString title;
+    if(isGroup_) title.Format(_T("群：%s (群号:%d)"),peerNick_.GetString(),peerId_);
+    else         title.Format(_T("与 %s (ID:%d) 聊天中"),peerNick_.GetString(),peerId_);
+    SetWindowText(title);
+    // 群聊显示「群成员」按钮，隐藏它对一对一无意义
+    if(GetDlgItem(IDC_CHAT_MEMBERS_BTN)) GetDlgItem(IDC_CHAT_MEMBERS_BTN)->ShowWindow(isGroup_?SW_SHOW:SW_HIDE);
+    // 聊天记录文件：群用负数区分（避免与好友 id 撞名）
+    try { logger_=std::make_unique<ChatLogger>(ExecutableDirectory()/L"logs",
+            g_ctx.selfId, isGroup_? -peerId_ : peerId_); } catch(...){}
     if(!logger_||!logger_->IsReady()){ logWarningShown_=true; }
     RequestHistory(0);
     return TRUE;
@@ -61,7 +71,8 @@ CString CChatDlg::CacheDir() const {
 
 void CChatDlg::RequestHistory(long long before){
     historyRequestId_=main_->NextRequestId();
-    g_ctx.net.Send(Pack("CHAT_HISTORY",{std::to_string(peerId_),std::to_string(before),"50",std::to_string(historyRequestId_)}));
+    const char* cmd = isGroup_ ? "GROUP_HISTORY" : "CHAT_HISTORY";
+    g_ctx.net.Send(Pack(cmd,{std::to_string(peerId_),std::to_string(before),"50",std::to_string(historyRequestId_)}));
 }
 void CChatDlg::OnHistoryBegin(unsigned long long,int){}
 void CChatDlg::OnHistoryItem(unsigned long long requestId,const ClientChatMessage& msg){
@@ -97,7 +108,8 @@ void CChatDlg::RefreshList(){
 void CChatDlg::OnSend(){
     CString text; GetDlgItemText(IDC_CHAT_INPUT,text); text.Trim(); if(text.IsEmpty()) return;
     unsigned long long cid=++nextClientMsgId_; pendingSends_[cid]=text;
-    g_ctx.net.Send(Pack("CHAT",{std::to_string(peerId_),std::to_string(cid),EncodeWireText(CS2U8(text))}));
+    const char* cmd = isGroup_ ? "GROUP_CHAT" : "CHAT";
+    g_ctx.net.Send(Pack(cmd,{std::to_string(peerId_),std::to_string(cid),EncodeWireText(CS2U8(text))}));
     SetDlgItemText(IDC_CHAT_INPUT,_T(""));
 }
 void CChatDlg::OnChatAck(unsigned long long cid,int status,long long msgId,const CString& sendTime){
@@ -105,8 +117,10 @@ void CChatDlg::OnChatAck(unsigned long long cid,int status,long long msgId,const
     CString content=it->second; pendingSends_.erase(it);
     if(status!=0){ AfxMessageBox(_T("消息发送失败")); return; }
     ClientChatMessage m; m.msgId=msgId; m.senderId=g_ctx.selfId; m.receiverId=peerId_; m.sendTime=sendTime; m.content=content;
+    m.senderNick=_T("我");
     InsertMessage(m,true); RefreshList();
 }
+void CChatDlg::OnMembers(){ if(main_) main_->OpenGroupMembers(peerId_, peerNick_); }
 
 // ---------------- 发送图片/文件 ----------------
 void CChatDlg::OnSendImage(){
@@ -126,12 +140,12 @@ void CChatDlg::StartUpload(const CString& path,int kind){
     auto buf=std::make_shared<std::vector<char>>((size_t)len);
     f.Read(buf->data(),(UINT)len); f.Close();
     CString name=path; int slash=name.ReverseFind(_T('\\')); if(slash>=0) name=name.Mid(slash+1);
-    CString token; token.Format(_T("u%llu"),++nextToken_);
+    CString token; token.Format(_T("u%d_%d_%llu"),isGroup_?1:0,peerId_,++nextToken_);
     uploads_[token]=Upload{name,kind,(long long)len};
     std::string tk=CS2U8(token), nm=EncodeWireText(CS2U8(name)), total=std::to_string((long long)len);
-    int pid=peerId_;
-    std::thread([tk,nm,kind,pid,total,buf](){
-        g_ctx.net.Send(Pack("FILE_BEGIN",{std::to_string(pid),tk,std::to_string(kind),nm,total}));
+    int pid=peerId_; std::string scope = isGroup_ ? "1" : "0";
+    std::thread([tk,nm,kind,pid,total,scope,buf](){
+        g_ctx.net.Send(Pack("FILE_BEGIN",{std::to_string(pid),tk,std::to_string(kind),nm,total,scope}));
         int seq=0;
         for(size_t off=0; off<buf->size(); off+=kFileChunkBytes){
             size_t n=(std::min)((size_t)kFileChunkBytes, buf->size()-off);
@@ -158,7 +172,7 @@ void CChatDlg::EnsureImageDownloaded(const ClientChatMessage& m){
     if(m.kind!=kKindImage || m.fileId<=0) return;
     CString path; path.Format(_T("%s\\%lld_%s"),CacheDir().GetString(),m.fileId,m.fileName.GetString());
     if(GetFileAttributes(path)!=INVALID_FILE_ATTRIBUTES){ messages_[m.msgId].localPath=path; EnsureThumb(messages_[m.msgId]); return; }
-    CString rq; rq.Format(_T("d%llu"),++nextToken_);
+    CString rq; rq.Format(_T("d%d_%d_%llu"),isGroup_?1:0,peerId_,++nextToken_);
     auto d=std::make_shared<Download>(); d->savePath=path; d->forMsgId=m.msgId; d->kind=kKindImage; d->total=0;
     downloads_[rq]=d;
     g_ctx.net.Send(Pack("FILE_GET",{std::to_string(m.fileId),CS2U8(rq)}));
@@ -240,7 +254,9 @@ void CChatDlg::OnDrawItem(int id,LPDRAWITEMSTRUCT dis){
     dc.FillSolidRect(&rc, GetSysColor(COLOR_WINDOW));
     const auto& m=messages_[order_[dis->itemID]];
     bool mine=(m.senderId==g_ctx.selfId);
-    CString who=mine?_T("我"):(peerNick_.IsEmpty()?_T("对方"):peerNick_);
+    CString who;
+    if(isGroup_) who = mine?_T("我"):(m.senderNick.IsEmpty()?_T("成员"):m.senderNick);
+    else         who = mine?_T("我"):(peerNick_.IsEmpty()?_T("对方"):peerNick_);
     CString head; head.Format(_T("[%s] %s"),m.sendTime.GetString(),who.GetString());
     dc.SetBkMode(TRANSPARENT); dc.SetTextColor(RGB(120,120,120));
     dc.TextOut(rc.left+8,rc.top+3,head);
@@ -275,7 +291,7 @@ void CChatDlg::OnDblClkList(){
     } else if(m.kind==kKindFile){
         CFileDialog dlg(FALSE,nullptr,m.fileName,OFN_OVERWRITEPROMPT,_T("所有文件|*.*||"),this);
         if(dlg.DoModal()!=IDOK) return;
-        CString rq; rq.Format(_T("d%llu"),++nextToken_);
+        CString rq; rq.Format(_T("d%d_%d_%llu"),isGroup_?1:0,peerId_,++nextToken_);
         auto d=std::make_shared<Download>(); d->savePath=dlg.GetPathName(); d->forMsgId=m.msgId; d->kind=kKindFile; d->total=0;
         downloads_[rq]=d;
         g_ctx.net.Send(Pack("FILE_GET",{std::to_string(m.fileId),CS2U8(rq)}));
@@ -285,4 +301,4 @@ void CChatDlg::OnLoadOlder(){ if(hasMore_) RequestHistory(nextBeforeMsgId_); }
 void CChatDlg::OnContextMenu(CWnd*,CPoint point){ CMenu mn;mn.CreatePopupMenu();mn.AppendMenu(MF_STRING,ID_SHOW_VERSION,_T("查询软件版本"));mn.TrackPopupMenu(TPM_LEFTALIGN|TPM_RIGHTBUTTON,point.x,point.y,this); }
 void CChatDlg::OnShowVersion(){ AfxMessageBox(CString(_T("软件版本："))+CString(myqq::kAppVersion)); }
 void CChatDlg::OnClose(){ DestroyWindow(); }
-void CChatDlg::PostNcDestroy(){ if(main_) main_->OnChatClosed(peerId_); delete this; }
+void CChatDlg::PostNcDestroy(){ if(main_){ if(isGroup_) main_->OnGroupChatClosed(peerId_); else main_->OnChatClosed(peerId_);} delete this; }

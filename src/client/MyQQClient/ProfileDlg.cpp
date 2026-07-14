@@ -121,13 +121,15 @@ void CProfileDlg::OnSave() {
     int avatarN = m_avatar.GetCurSel();  if (avatarN < 0) avatarN = 0;
     std::string avatar = (avatarN >= 1) ? ("avatar_" + std::to_string(avatarN)) : "";
 
+    int visibility = (IsDlgButtonChecked(IDC_PROFILE_VISIBILITY) == BST_CHECKED) ? 1 : 0;
     g_ctx.net.Send(Pack("UPDATE_PROFILE", {
         EncodeWireText(CSToU8(m_nickname)),
         std::to_string(gender),
         std::to_string(starId),
         std::to_string(bloodId),
         EncodeWireText(CSToU8(m_signature)),
-        EncodeWireText(avatar)
+        EncodeWireText(avatar),
+        std::to_string(visibility)
     }));
 }
 

@@ -78,6 +78,10 @@
     <ClCompile Include="SettingsDlg.cpp" />
     <ClCompile Include="VerifyDlg.cpp" />
     <ClCompile Include="FriendRequestsDlg.cpp" />
+    <ClCompile Include="GroupDlg.cpp" />
+    <ClCompile Include="CreateGroupDlg.cpp" />
+    <ClCompile Include="GroupMembersDlg.cpp" />
+    <ClCompile Include="ViewProfileDlg.cpp" />
     <ClCompile Include="..\..\common\Message.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -101,6 +105,10 @@
     <ClInclude Include="SettingsDlg.h" />
     <ClInclude Include="VerifyDlg.h" />
     <ClInclude Include="FriendRequestsDlg.h" />
+    <ClInclude Include="GroupDlg.h" />
+    <ClInclude Include="CreateGroupDlg.h" />
+    <ClInclude Include="GroupMembersDlg.h" />
+    <ClInclude Include="ViewProfileDlg.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="..\..\common\PathUtils.h" />
   </ItemGroup>

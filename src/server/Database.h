@@ -56,6 +56,51 @@ struct FileRecord {
     std::string storePath;
 };
 
+struct GroupInfo {
+    long long groupId = 0;
+    std::string name;
+    int ownerId = 0;
+    int requireApproval = 0;
+    int memberCount = 0;
+    int myRole = 0;
+};
+
+struct GroupMemberInfo {
+    int userId = 0;
+    std::string nickName;
+    int role = 0;
+};
+
+struct GroupMessageInfo {
+    long long msgId = 0;
+    long long groupId = 0;
+    int senderId = 0;
+    std::string senderNick;
+    int typeId = 1;
+    std::string content;
+    std::string sendTime;
+    int kind = 0;
+    long long fileId = 0;
+    std::string fileName;
+    long long fileSize = 0;
+};
+
+// 入群请求（申请或邀请）
+struct GroupReqInfo {
+    long long reqId = 0;
+    long long groupId = 0;
+    std::string groupName;
+    int targetId = 0;
+    int inviterId = 0;
+    std::string targetNick;
+    std::string inviterNick;
+    int needInviteeOk = 0;
+    int needOwnerOk = 0;
+    int inviteeOk = 0;
+    int ownerOk = 0;
+    int status = 0;
+};
+
 struct FriendRequestInfo {
     long long requestId = 0;
     int senderId = 0;
@@ -112,6 +157,35 @@ public:
     bool GetProfile(int userId, ProfileInfo& out);
     // 更新个人资料（昵称/性别/星座/血型/签名/头像）；成功 true
     bool UpdateProfile(const ProfileInfo& p);
+    void SetVisibility(int userId, int visibility);
+    // 是否允许 viewer 查看 target 资料：本人 / 好友 / (target.Visibility==0 且同群)
+    bool CanViewProfile(int viewer, int target);
+
+    // ---------- 群聊 ----------
+    long long CreateGroup(int ownerId, const std::string& name, int requireApproval);
+    bool GetGroup(long long groupId, GroupInfo& out);
+    std::vector<GroupInfo> SearchGroups(const std::string& keyword);
+    std::vector<GroupInfo> GetMyGroups(int userId);
+    std::vector<GroupMemberInfo> GetGroupMembers(long long groupId);
+    bool IsGroupMember(int userId, long long groupId);
+    bool AddGroupMember(long long groupId, int userId, int role);
+    bool ShareAnyGroup(int a, int b);   // 两人是否在同一个群
+
+    long long SaveGroupMessage(long long groupId, int senderId, int typeId,
+                               const std::string& content, long long fileId);
+    bool GetGroupMessageById(long long msgId, GroupMessageInfo& out);
+    std::vector<GroupMessageInfo> GetGroupConversation(long long groupId,
+                               long long beforeMsgId, int limit);
+
+    // 入群状态机（返回 0 成功；3 不存在；4 已是成员/重复；5 服务器错误）
+    int CreateGroupApply(int userId, long long groupId, GroupReqInfo& out);   // 自己申请
+    int CreateGroupInvite(int inviterId, long long groupId, int friendId, GroupReqInfo& out);
+    int ResolveInvite(long long reqId, int targetId, bool accept, GroupReqInfo& out); // 被邀请人
+    int ResolveApprove(long long reqId, int ownerId, bool accept, GroupReqInfo& out); // 群主
+    std::vector<GroupReqInfo> GetPendingInvites(int targetId);      // 待我确认的邀请
+    std::vector<GroupReqInfo> GetPendingApprovals(int ownerId);     // 待我审批（我是群主）
+    std::vector<GroupReqInfo> GetUnackedGroupResults(int userId);   // 我未读的结果
+    bool AckGroupResult(long long reqId, int userId);
 
     // ---------- 文件/图片 ----------
     // 建文件记录，返回 fileId(>0) 或 0；同时回填 storePath
@@ -139,6 +213,7 @@ private:
     std::recursive_mutex mutex_;
 
     bool Exec(const std::string& sql);   // 执行无结果集 SQL
+    void finalizeJoin(long long reqId, long long groupId, int targetId);  // 入群完成（内部）
 };
 
 } // namespace myqq

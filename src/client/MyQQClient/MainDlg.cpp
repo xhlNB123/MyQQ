@@ -4,6 +4,9 @@
 #include "ProfileDlg.h"
 #include "SettingsDlg.h"
 #include "VerifyDlg.h"
+#include "GroupDlg.h"
+#include "GroupMembersDlg.h"
+#include "ViewProfileDlg.h"
 #include "AppContext.h"
 #include "../../common/Message.h"
 #include <algorithm>
@@ -34,6 +37,8 @@ BEGIN_MESSAGE_MAP(CMainDlg,CDialogEx)
  ON_BN_CLICKED(IDC_SEARCH_BTN,&CMainDlg::OnSearch) ON_BN_CLICKED(IDC_REFRESH_BTN,&CMainDlg::OnRefresh)
  ON_BN_CLICKED(IDC_OPEN_CHAT_BTN,&CMainDlg::OnOpenChat) ON_BN_CLICKED(IDC_PROFILE_BTN,&CMainDlg::OnProfile)
  ON_BN_CLICKED(IDC_SETTINGS_BTN,&CMainDlg::OnSettings) ON_BN_CLICKED(IDC_FRIEND_REQUESTS_BTN,&CMainDlg::OnFriendRequests)
+ ON_BN_CLICKED(IDC_GROUP_BTN,&CMainDlg::OnGroups) ON_BN_CLICKED(IDC_SEARCH_GROUP_BTN,&CMainDlg::OnSearchGroup)
+ ON_BN_CLICKED(IDC_VIEW_PROFILE_BTN,&CMainDlg::OnViewProfileBtn)
  ON_NOTIFY(NM_DBLCLK,IDC_FRIEND_LIST,&CMainDlg::OnDblClkFriend)
  ON_MESSAGE(WM_NET_MESSAGE,&CMainDlg::OnNetMessage) ON_MESSAGE(WM_NET_CLOSED,&CMainDlg::OnNetClosed) ON_WM_DESTROY()
 END_MESSAGE_MAP()
@@ -42,7 +47,7 @@ BOOL CMainDlg::OnInitDialog(){
  CDialogEx::OnInitDialog();g_ctx.net.SetNotifyWnd(GetSafeHwnd());
  friendList_.SetExtendedStyle(LVS_EX_FULLROWSELECT|LVS_EX_GRIDLINES);friendList_.InsertColumn(0,_T("ID"),LVCFMT_LEFT,65);friendList_.InsertColumn(1,_T("昵称"),LVCFMT_LEFT,120);friendList_.InsertColumn(2,_T("状态"),LVCFMT_LEFT,60);
  CString self;self.Format(_T("%S  |  QQ号 %d  |  在线"),g_ctx.selfNick.c_str(),g_ctx.selfId);SetDlgItemText(IDC_MAIN_SELF_INFO,self);
- UpdateRequestButton();RequestFriendList();g_ctx.net.Send(Pack("FRIEND_SYNC",{}));return TRUE;
+ UpdateRequestButton();RequestFriendList();g_ctx.net.Send(Pack("FRIEND_SYNC",{}));g_ctx.net.Send(Pack("GROUP_SYNC",{}));return TRUE;
 }
 void CMainDlg::RequestFriendList(){g_ctx.net.Send(Pack("FRIEND_LIST",{}));}
 void CMainDlg::OnRefresh(){RequestFriendList();}
@@ -53,7 +58,34 @@ void CMainDlg::OnOpenChat(){int id=SelectedFriendId();if(!id){AfxMessageBox(_T("
 void CMainDlg::OnDblClkFriend(NMHDR*,LRESULT* r){OnOpenChat();*r=0;}
 void CMainDlg::OpenChatWith(int id,const CString& nick){auto it=chatWnds_.find(id);if(it!=chatWnds_.end()&&IsWindow(it->second->GetSafeHwnd())){it->second->SetForegroundWindow();return;}auto d=new CChatDlg(id,nick,this);d->Create(IDD_CHAT_DIALOG,this);chatWnds_[id]=d;d->ShowWindow(SW_SHOW);}
 void CMainDlg::OnChatClosed(int id){if(!destroyingChats_)chatWnds_.erase(id);}
-void CMainDlg::CloseChatWindows(){destroyingChats_=true;auto copy=chatWnds_;chatWnds_.clear();for(auto& p:copy)if(p.second&&IsWindow(p.second->GetSafeHwnd()))p.second->DestroyWindow();destroyingChats_=false;}
+void CMainDlg::OnGroupChatClosed(int gid){if(!destroyingChats_)groupWnds_.erase(gid);}
+void CMainDlg::CloseChatWindows(){
+    destroyingChats_=true;
+    auto c1=chatWnds_; chatWnds_.clear();
+    for(auto& p:c1) if(p.second&&IsWindow(p.second->GetSafeHwnd())) p.second->DestroyWindow();
+    auto c2=groupWnds_; groupWnds_.clear();
+    for(auto& p:c2) if(p.second&&IsWindow(p.second->GetSafeHwnd())) p.second->DestroyWindow();
+    destroyingChats_=false;
+}
+void CMainDlg::OpenGroupChat(int gid,const CString& name){
+    auto it=groupWnds_.find(gid);
+    if(it!=groupWnds_.end()&&IsWindow(it->second->GetSafeHwnd())){it->second->SetForegroundWindow();return;}
+    auto d=new CChatDlg(gid,name,this,true);
+    d->Create(IDD_CHAT_DIALOG,this); groupWnds_[gid]=d; d->ShowWindow(SW_SHOW);
+}
+void CMainDlg::OpenGroupMembers(int gid,const CString& name){
+    CGroupMembersDlg dlg(this,gid,name,this); membersDlg_=&dlg; dlg.DoModal(); membersDlg_=nullptr;
+}
+void CMainDlg::ViewProfile(int userId){
+    g_ctx.net.Send(Pack("VIEW_PROFILE",{std::to_string(userId)}));
+    CViewProfileDlg dlg(this); viewProfileDlg_=&dlg; dlg.DoModal(); viewProfileDlg_=nullptr;
+}
+void CMainDlg::InviteToGroup(int gid,int friendId){
+    g_ctx.net.Send(Pack("GROUP_INVITE",{std::to_string(gid),std::to_string(friendId)}));
+}
+void CMainDlg::OnGroups(){ CGroupDlg dlg(this,this); groupDlg_=&dlg; dlg.DoModal(); groupDlg_=nullptr; }
+void CMainDlg::OnSearchGroup(){ OnGroups(); }
+void CMainDlg::OnViewProfileBtn(){ int id=SelectedFriendId(); if(!id){AfxMessageBox(_T("请先选择好友"));return;} ViewProfile(id); }
 void CMainDlg::OnProfile(){CProfileDlg d(this);profileDlg_=&d;g_ctx.net.Send(Pack("GET_PROFILE",{}));d.DoModal();profileDlg_=nullptr;CString self;self.Format(_T("%S  |  QQ号 %d  |  在线"),g_ctx.selfNick.c_str(),g_ctx.selfId);SetDlgItemText(IDC_MAIN_SELF_INFO,self);}
 void CMainDlg::OnSettings(){
  CSettingsDlg d(this);
@@ -84,12 +116,30 @@ void CMainDlg::HandleLine(const std::string& line){
  else if(c=="CHAT_HISTORY_BEGIN"&&t.size()>=5){auto id=_strtoui64(t[2].c_str(),nullptr,10);int peer=atoi(t[3].c_str());auto it=chatWnds_.find(peer);if(it!=chatWnds_.end())it->second->OnHistoryBegin(id,atoi(t[4].c_str()));}
  else if(c=="CHAT_HISTORY_ITEM"&&t.size()>=10){auto req=_strtoui64(t[1].c_str(),nullptr,10);ClientChatMessage m;FillMsgFromTail(m,t,2);for(auto&p:chatWnds_)if(p.second->HistoryRequestId()==req)p.second->OnHistoryItem(req,m);}
  else if(c=="CHAT_HISTORY_END"&&t.size()>=4){auto req=_strtoui64(t[1].c_str(),nullptr,10);for(auto&p:chatWnds_)if(p.second->HistoryRequestId()==req)p.second->OnHistoryEnd(req,t[2]=="1",_atoi64(t[3].c_str()));}
- else if(c=="FILE_BEGIN_ACK"&&t.size()>=3){for(auto&p:chatWnds_)p.second->OnFileBeginAck(CString(t[1].c_str()),atoi(t[2].c_str()));}
- else if(c=="FILE_DONE"&&t.size()>=3){for(auto&p:chatWnds_)p.second->OnFileDone(CString(t[1].c_str()),atoi(t[2].c_str()),t.size()>3?_atoi64(t[3].c_str()):0,t.size()>4?DecodeCS(t[4]):CString());}
- else if(c=="FILE_DATA_BEGIN"&&t.size()>=3){CString rq(t[1].c_str());int st=atoi(t[2].c_str());for(auto&p:chatWnds_)p.second->OnFileDataBegin(rq,st,t.size()>3?atoi(t[3].c_str()):0,t.size()>4?DecodeCS(t[4]):CString(),t.size()>5?_atoi64(t[5].c_str()):0);}
- else if(c=="FILE_DATA_CHUNK"&&t.size()>=4){CString rq(t[1].c_str());std::string d;DecodeWireText(t[3],d);for(auto&p:chatWnds_)p.second->OnFileDataChunk(rq,d);}
- else if(c=="FILE_DATA_END"&&t.size()>=2){CString rq(t[1].c_str());for(auto&p:chatWnds_)p.second->OnFileDataEnd(rq);}
+ // 群消息：GROUP_PUSH|msgId|groupId|senderId|senderNickB64|timeB64|kind|contentB64|fileId|nameB64|size
+ else if(c=="GROUP_PUSH"&&t.size()>=11){int gid=atoi(t[2].c_str());ClientChatMessage m;m.msgId=_atoi64(t[1].c_str());m.senderId=atoi(t[3].c_str());m.senderNick=DecodeCS(t[4]);m.receiverId=gid;m.sendTime=DecodeCS(t[5]);m.kind=atoi(t[6].c_str());m.content=DecodeCS(t[7]);m.fileId=_atoi64(t[8].c_str());m.fileName=DecodeCS(t[9]);m.fileSize=_atoi64(t[10].c_str());auto it=groupWnds_.find(gid);if(it!=groupWnds_.end())it->second->OnLiveMessage(m);}
+ else if(c=="GROUP_CHAT_ACK"&&t.size()>=3){unsigned long long cid=_strtoui64(t[2].c_str(),nullptr,10);for(auto&p:groupWnds_)p.second->OnChatAck(cid,atoi(t[1].c_str()),t.size()>3?_atoi64(t[3].c_str()):0,t.size()>4?DecodeCS(t[4]):CString());}
+ else if(c=="GROUP_HISTORY_BEGIN"&&t.size()>=5){auto id=_strtoui64(t[2].c_str(),nullptr,10);int gid=atoi(t[3].c_str());auto it=groupWnds_.find(gid);if(it!=groupWnds_.end())it->second->OnHistoryBegin(id,atoi(t[4].c_str()));}
+ else if(c=="GROUP_HISTORY_ITEM"&&t.size()>=11){auto req=_strtoui64(t[1].c_str(),nullptr,10);ClientChatMessage m;m.msgId=_atoi64(t[2].c_str());m.receiverId=atoi(t[3].c_str());m.senderId=atoi(t[4].c_str());m.senderNick=DecodeCS(t[5]);m.sendTime=DecodeCS(t[6]);m.kind=atoi(t[7].c_str());m.content=DecodeCS(t[8]);m.fileId=_atoi64(t[9].c_str());m.fileName=DecodeCS(t[10]);m.fileSize=(t.size()>11)?_atoi64(t[11].c_str()):0;for(auto&p:groupWnds_)if(p.second->HistoryRequestId()==req)p.second->OnHistoryItem(req,m);}
+ else if(c=="GROUP_HISTORY_END"&&t.size()>=4){auto req=_strtoui64(t[1].c_str(),nullptr,10);for(auto&p:groupWnds_)if(p.second->HistoryRequestId()==req)p.second->OnHistoryEnd(req,t[2]=="1",_atoi64(t[3].c_str()));}
+ // 文件传输：广播到所有一对一 + 群窗口，各窗口按 token 自过滤
+ else if(c=="FILE_BEGIN_ACK"&&t.size()>=3){CString tk(t[1].c_str());int st=atoi(t[2].c_str());for(auto&p:chatWnds_)p.second->OnFileBeginAck(tk,st);for(auto&p:groupWnds_)p.second->OnFileBeginAck(tk,st);}
+ else if(c=="FILE_DONE"&&t.size()>=3){CString tk(t[1].c_str());int st=atoi(t[2].c_str());long long mid=t.size()>3?_atoi64(t[3].c_str()):0;CString tm=t.size()>4?DecodeCS(t[4]):CString();for(auto&p:chatWnds_)p.second->OnFileDone(tk,st,mid,tm);for(auto&p:groupWnds_)p.second->OnFileDone(tk,st,mid,tm);}
+ else if(c=="FILE_DATA_BEGIN"&&t.size()>=3){CString rq(t[1].c_str());int st=atoi(t[2].c_str());int kd=t.size()>3?atoi(t[3].c_str()):0;CString nm=t.size()>4?DecodeCS(t[4]):CString();long long tot=t.size()>5?_atoi64(t[5].c_str()):0;for(auto&p:chatWnds_)p.second->OnFileDataBegin(rq,st,kd,nm,tot);for(auto&p:groupWnds_)p.second->OnFileDataBegin(rq,st,kd,nm,tot);}
+ else if(c=="FILE_DATA_CHUNK"&&t.size()>=4){CString rq(t[1].c_str());std::string d;DecodeWireText(t[3],d);for(auto&p:chatWnds_)p.second->OnFileDataChunk(rq,d);for(auto&p:groupWnds_)p.second->OnFileDataChunk(rq,d);}
+ else if(c=="FILE_DATA_END"&&t.size()>=2){CString rq(t[1].c_str());for(auto&p:chatWnds_)p.second->OnFileDataEnd(rq);for(auto&p:groupWnds_)p.second->OnFileDataEnd(rq);}
  else if(c=="GET_PROFILE_RESP"||c=="UPDATE_PROFILE_RESP"){if(profileDlg_&&IsWindow(profileDlg_->GetSafeHwnd()))profileDlg_->SendMessage(WM_NET_MESSAGE,0,(LPARAM)new std::string(line));}
+ else if(c=="VIEW_PROFILE_RESP"){if(t.size()>1&&t[1]!="0"){AfxMessageBox(t.size()>2?DecodeCS(t[2]):CString(_T("无法查看")));}else if(viewProfileDlg_&&IsWindow(viewProfileDlg_->GetSafeHwnd()))((CViewProfileDlg*)viewProfileDlg_)->Fill(t);}
+ // 群通知
+ else if(c=="GROUP_CREATE_RESP"){if(t.size()>1&&t[1]=="0"){AfxMessageBox(_T("建群成功，群号：")+U82CS(t[2]));g_ctx.net.Send(Pack("GROUP_LIST",{}));}else AfxMessageBox(_T("建群失败"));}
+ else if(c=="GROUP_LIST_RESP"){if(groupDlg_&&IsWindow(groupDlg_->GetSafeHwnd()))((CGroupDlg*)groupDlg_)->OnGroupList(t);}
+ else if(c=="GROUP_SEARCH_RESP"){if(groupDlg_&&IsWindow(groupDlg_->GetSafeHwnd()))((CGroupDlg*)groupDlg_)->OnGroupSearch(t);}
+ else if(c=="GROUP_MEMBERS_RESP"){if(membersDlg_&&IsWindow(membersDlg_->GetSafeHwnd()))((CGroupMembersDlg*)membersDlg_)->OnMembers(t);}
+ else if(c=="GROUP_APPLY_RESP"){if(t.size()>2)AfxMessageBox(t[1]=="0"?(t[2]=="joined"?_T("已加入群"):_T("已提交申请，等待群主审批")):_T("加群失败"));}
+ else if(c=="GROUP_INVITE_RESP"){AfxMessageBox(t.size()>1&&t[1]=="0"?_T("邀请已发送"):_T("邀请失败（对方非好友或已在群）"));}
+ else if(c=="GROUP_APPLY_PUSH"&&t.size()>=5){CString gn=DecodeCS(t[3]),who=DecodeCS(t[4]);CString msg;msg.Format(_T("%s 申请加入群「%s」，是否同意？"),who.GetString(),gn.GetString());int r=AfxMessageBox(msg,MB_YESNO);g_ctx.net.Send(Pack("GROUP_APPROVE",{t[1],r==IDYES?"1":"0"}));}
+ else if(c=="GROUP_INVITE_PUSH"&&t.size()>=5){CString gn=DecodeCS(t[3]),who=DecodeCS(t[4]);CString msg;msg.Format(_T("%s 邀请你加入群「%s」，是否接受？"),who.GetString(),gn.GetString());int r=AfxMessageBox(msg,MB_YESNO);g_ctx.net.Send(Pack("GROUP_INVITE_ACK",{t[1],r==IDYES?"1":"0"}));}
+ else if(c=="GROUP_RESULT_PUSH"&&t.size()>=5){CString gn=DecodeCS(t[3]);bool joined=(t[4]=="1");CString m2;m2.Format(joined?_T("你已加入群「%s」"):_T("入群「%s」未通过"),gn.GetString());AfxMessageBox(m2);g_ctx.net.Send(Pack("GROUP_RESULT_SEEN",{t[1]}));if(joined)g_ctx.net.Send(Pack("GROUP_LIST",{}));}
  else if(c=="LOGOUT_RESP"&&logoutPending_)FinishLogout(logoutResult_);
 }
 void CMainDlg::DeliverChat(const ClientChatMessage& m){

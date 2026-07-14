@@ -7,6 +7,7 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <vector>
 
 namespace myqq {
 
@@ -20,6 +21,8 @@ public:
 
     // 向指定在线用户推送一行消息；用户不在线返回 false
     bool PushTo(int userId, const std::string& line);
+    // 向多个在线用户群发（排除 exceptUser，通常是发送者自己）
+    void PushToMany(const std::vector<int>& userIds, const std::string& line, int exceptUser);
 
     bool IsOnline(int userId);
 

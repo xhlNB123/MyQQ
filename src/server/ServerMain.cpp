@@ -31,7 +31,8 @@ static std::filesystem::path g_filesDir;   // 文件落盘目录 server/data/fil
 struct UploadState {
     long long fileId = 0;
     int       kind = 0;
-    int       peerId = 0;
+    int       peerId = 0;         // scope=0 时为好友 userId；scope=1 时为 groupId
+    int       scope = 0;          // 0 好友 1 群
     std::string clientMsgId;
     std::string fileName;
     long long expected = 0;
@@ -71,6 +72,22 @@ static std::vector<std::string> MsgTail(const MessageInfo& m) {
     return { EncodeWireText(m.sendTime), std::to_string(m.kind),
              EncodeWireText(m.content), std::to_string(m.fileId),
              EncodeWireText(m.fileName), std::to_string(m.fileSize) };
+}
+
+// GROUP_PUSH / GROUP_HISTORY_ITEM 主体：
+// msgId|groupId|senderId|senderNickB64|timeB64|kind|contentB64|fileId|nameB64|size
+static std::vector<std::string> GroupMsgBody(const GroupMessageInfo& m) {
+    return { std::to_string(m.msgId), std::to_string(m.groupId), std::to_string(m.senderId),
+             EncodeWireText(m.senderNick), EncodeWireText(m.sendTime), std::to_string(m.kind),
+             EncodeWireText(m.content), std::to_string(m.fileId),
+             EncodeWireText(m.fileName), std::to_string(m.fileSize) };
+}
+// 群发一条 GROUP_PUSH 给群里除 exceptUser 外的在线成员
+static void PushGroupMessage(const GroupMessageInfo& m, int exceptUser) {
+    std::vector<int> ids;
+    for (auto& mem : g_db.GetGroupMembers(m.groupId)) ids.push_back(mem.userId);
+    std::vector<std::string> push = GroupMsgBody(m);
+    g_sessions.PushToMany(ids, Pack("GROUP_PUSH", push), exceptUser);
 }
 
 // 处理单条请求。ctx.curUser：本连接已登录的 userId（0 表示未登录，可被回写）。
@@ -210,20 +227,23 @@ static std::string HandleRequest(const std::string& line, TcpSocket* conn, ConnC
             return Pack("CHAT_HISTORY_END", {requestId, more ? "1" : "0",
                 messages.empty() ? "0" : std::to_string(messages.front().msgId)});
         }
-        case Cmd::kFileBegin: {                        // FILE_BEGIN|peerId|token|kind|nameB64|totalBytes
+        case Cmd::kFileBegin: {          // FILE_BEGIN|targetId|token|kind|nameB64|totalBytes|scope
             if (!curUser) return AuthError("FILE_BEGIN_ACK");
             std::string token = t.size() > 2 ? t[2] : "0";
             if (t.size() < 6) return Pack("FILE_BEGIN_ACK", {token, "1"});
-            int peer = atoi(t[1].c_str());
+            int target = atoi(t[1].c_str());
             int kind = atoi(t[3].c_str());
+            int scope = (t.size() > 6) ? atoi(t[6].c_str()) : 0;
             std::string name;
             long long total = _atoi64(t[5].c_str());
+            bool okTarget = (scope == 1) ? g_db.IsGroupMember(curUser, target)
+                                         : g_db.AreFriends(curUser, target);
             if (!DecodeField(t, 4, name, 260) || name.empty() ||
                 (kind != kKindImage && kind != kKindFile) ||
-                total <= 0 || total > kMaxFileBytes || !g_db.AreFriends(curUser, peer))
+                total <= 0 || total > kMaxFileBytes || !okTarget)
                 return Pack("FILE_BEGIN_ACK", {token, "1"});
             auto st = std::make_shared<UploadState>();
-            st->kind = kind; st->peerId = peer;
+            st->kind = kind; st->peerId = target; st->scope = scope;
             st->clientMsgId = token; st->fileName = name; st->expected = total;
             // 先落临时文件，FILE_END 成功后再建 Files 记录
             st->path = g_filesDir / ("tmp_" + std::to_string(curUser) + "_" + token);
@@ -266,8 +286,16 @@ static std::string HandleRequest(const std::string& line, TcpSocket* conn, ConnC
             std::filesystem::path finalPath = g_filesDir / std::to_string(fileId);
             std::error_code ec; std::filesystem::rename(st->path, finalPath, ec);
             if (ec) { std::filesystem::remove(st->path, ec); ctx.uploads.erase(it); return Pack("FILE_DONE", {token, "5"}); }
-            int peer = st->peerId, kind = st->kind; std::string fname = st->fileName;
+            int peer = st->peerId, kind = st->kind, scope = st->scope; std::string fname = st->fileName;
             ctx.uploads.erase(it);
+            int typeId = (kind == kKindImage) ? 5 : 6;
+            if (scope == 1) {   // 群文件
+                long long gmsgId = g_db.SaveGroupMessage(peer, curUser, typeId, fname, fileId);
+                GroupMessageInfo gm;
+                if (!gmsgId || !g_db.GetGroupMessageById(gmsgId, gm)) return Pack("FILE_DONE", {token, "5"});
+                PushGroupMessage(gm, curUser);
+                return Pack("FILE_DONE", {token, "0", std::to_string(gm.msgId), EncodeWireText(gm.sendTime)});
+            }
             long long msgId = g_db.SaveFileMessage(curUser, peer, kind, fileId, fname);
             MessageInfo m;
             if (!msgId || !g_db.GetMessageById(msgId, m)) return Pack("FILE_DONE", {token, "5"});
@@ -284,6 +312,10 @@ static std::string HandleRequest(const std::string& line, TcpSocket* conn, ConnC
             FileRecord fr;
             if (!g_db.GetFileRecord(fileId, fr))
                 return Pack("FILE_DATA_BEGIN", {reqId, "3"});
+            // 鉴权：上传者本人 / 好友 / 同群，才可下载
+            if (curUser != fr.ownerId && !g_db.AreFriends(curUser, fr.ownerId) &&
+                !g_db.ShareAnyGroup(curUser, fr.ownerId))
+                return Pack("FILE_DATA_BEGIN", {reqId, "2"});
             std::ifstream ifs(fr.storePath.empty() ? (g_filesDir / std::to_string(fileId)) : std::filesystem::path(fr.storePath), std::ios::binary);
             if (!ifs) return Pack("FILE_DATA_BEGIN", {reqId, "3"});
             conn->SendLine(Pack("FILE_DATA_BEGIN", {reqId, "0", std::to_string(fr.kind),
@@ -314,7 +346,159 @@ static std::string HandleRequest(const std::string& line, TcpSocket* conn, ConnC
                 || !DecodeField(t, 6, p.avatar, 100)) return Pack("UPDATE_PROFILE_RESP", {"1"});
             p.gender = atoi(t[2].c_str()); p.starId = atoi(t[3].c_str()); p.bloodTypeId = atoi(t[4].c_str());
             bool ok = g_db.UpdateProfile(p);
+            if (ok && t.size() > 7) g_db.SetVisibility(curUser, atoi(t[7].c_str()));  // 可选可见性字段
             return Pack("UPDATE_PROFILE_RESP", {ok ? "0" : "5", ok ? "" : EncodeWireText(g_db.LastError())});
+        }
+        case Cmd::kViewProfile: {                      // VIEW_PROFILE|userId
+            if (!curUser) return AuthError("VIEW_PROFILE_RESP");
+            int target = t.size() > 1 ? atoi(t[1].c_str()) : 0;
+            if (!g_db.CanViewProfile(curUser, target))
+                return Pack("VIEW_PROFILE_RESP", {"2", EncodeWireText("对方未公开资料")});
+            ProfileInfo p;
+            if (!g_db.GetProfile(target, p)) return Pack("VIEW_PROFILE_RESP", {"3", EncodeWireText("用户不存在")});
+            return Pack("VIEW_PROFILE_RESP", {"0", std::to_string(p.userId), EncodeWireText(p.account),
+                EncodeWireText(p.nickName), std::to_string(p.gender), std::to_string(p.starId),
+                std::to_string(p.bloodTypeId), EncodeWireText(p.signature), EncodeWireText(p.avatar)});
+        }
+        case Cmd::kGroupCreate: {                       // GROUP_CREATE|nameB64|requireApproval
+            if (!curUser) return AuthError("GROUP_CREATE_RESP");
+            std::string name;
+            if (!DecodeField(t, 1, name, 60) || name.empty()) return Pack("GROUP_CREATE_RESP", {"1", "0"});
+            long long gid = g_db.CreateGroup(curUser, name, t.size() > 2 ? atoi(t[2].c_str()) : 0);
+            return Pack("GROUP_CREATE_RESP", {gid ? "0" : "5", std::to_string(gid)});
+        }
+        case Cmd::kGroupSearch: {                       // GROUP_SEARCH|keywordB64
+            if (!curUser) return AuthError("GROUP_SEARCH_RESP");
+            std::string kw;
+            if (!DecodeField(t, 1, kw, 60)) return Pack("GROUP_SEARCH_RESP", {"1"});
+            auto gs = g_db.SearchGroups(kw);
+            std::vector<std::string> args = {"0", std::to_string(gs.size())};
+            for (auto& g : gs) { args.push_back(std::to_string(g.groupId)); args.push_back(EncodeWireText(g.name));
+                args.push_back(std::to_string(g.memberCount)); args.push_back(std::to_string(g.requireApproval)); }
+            return Pack("GROUP_SEARCH_RESP", args);
+        }
+        case Cmd::kGroupList: {                         // GROUP_LIST
+            if (!curUser) return AuthError("GROUP_LIST_RESP");
+            auto gs = g_db.GetMyGroups(curUser);
+            std::vector<std::string> args = {"0", std::to_string(gs.size())};
+            for (auto& g : gs) { args.push_back(std::to_string(g.groupId)); args.push_back(EncodeWireText(g.name));
+                args.push_back(std::to_string(g.myRole)); }
+            return Pack("GROUP_LIST_RESP", args);
+        }
+        case Cmd::kGroupMembers: {                      // GROUP_MEMBERS|groupId
+            if (!curUser) return AuthError("GROUP_MEMBERS_RESP");
+            long long gid = t.size() > 1 ? _atoi64(t[1].c_str()) : 0;
+            if (!g_db.IsGroupMember(curUser, gid)) return Pack("GROUP_MEMBERS_RESP", {"2", std::to_string(gid), "0"});
+            auto ms = g_db.GetGroupMembers(gid);
+            std::vector<std::string> args = {"0", std::to_string(gid), std::to_string(ms.size())};
+            for (auto& m : ms) { args.push_back(std::to_string(m.userId)); args.push_back(EncodeWireText(m.nickName));
+                args.push_back(std::to_string(m.role)); }
+            return Pack("GROUP_MEMBERS_RESP", args);
+        }
+        case Cmd::kGroupApply: {                        // GROUP_APPLY|groupId
+            if (!curUser) return AuthError("GROUP_APPLY_RESP");
+            long long gid = t.size() > 1 ? _atoi64(t[1].c_str()) : 0;
+            GroupReqInfo r;
+            int status = g_db.CreateGroupApply(curUser, gid, r);
+            if (status != 0) return Pack("GROUP_APPLY_RESP", {std::to_string(status), "fail"});
+            if (r.status == 1) return Pack("GROUP_APPLY_RESP", {"0", "joined"});
+            // 需审批：推给群主
+            GroupInfo g; g_db.GetGroup(gid, g);
+            UserInfo me; g_db.GetUserInfo(curUser, me);
+            g_sessions.PushTo(g.ownerId, Pack("GROUP_APPLY_PUSH", {std::to_string(r.reqId),
+                std::to_string(gid), EncodeWireText(g.name), EncodeWireText(me.nickName)}));
+            return Pack("GROUP_APPLY_RESP", {"0", "pending"});
+        }
+        case Cmd::kGroupInvite: {                       // GROUP_INVITE|groupId|friendId
+            if (!curUser) return AuthError("GROUP_INVITE_RESP");
+            long long gid = t.size() > 1 ? _atoi64(t[1].c_str()) : 0;
+            int friendId = t.size() > 2 ? atoi(t[2].c_str()) : 0;
+            if (!g_db.AreFriends(curUser, friendId)) return Pack("GROUP_INVITE_RESP", {"1"});
+            GroupReqInfo r;
+            int status = g_db.CreateGroupInvite(curUser, gid, friendId, r);
+            if (status != 0) return Pack("GROUP_INVITE_RESP", {std::to_string(status)});
+            GroupInfo g; g_db.GetGroup(gid, g);
+            UserInfo me; g_db.GetUserInfo(curUser, me);
+            g_sessions.PushTo(friendId, Pack("GROUP_INVITE_PUSH", {std::to_string(r.reqId),
+                std::to_string(gid), EncodeWireText(g.name), EncodeWireText(me.nickName)}));
+            return Pack("GROUP_INVITE_RESP", {"0"});
+        }
+        case Cmd::kGroupInviteAck: {                    // GROUP_INVITE_ACK|reqId|accept
+            if (!curUser) return AuthError("GROUP_INVITE_ACK_RESP");
+            long long reqId = t.size() > 1 ? _atoi64(t[1].c_str()) : 0;
+            bool accept = t.size() > 2 && atoi(t[2].c_str()) != 0;
+            GroupReqInfo r;
+            int status = g_db.ResolveInvite(reqId, curUser, accept, r);
+            if (status != 0) return Pack("GROUP_INVITE_ACK_RESP", {std::to_string(status)});
+            GroupInfo g; g_db.GetGroup(r.groupId, g);
+            if (r.status == 0 && r.needOwnerOk) {   // 转待群主审批
+                UserInfo me; g_db.GetUserInfo(curUser, me);
+                g_sessions.PushTo(g.ownerId, Pack("GROUP_APPLY_PUSH", {std::to_string(r.reqId),
+                    std::to_string(r.groupId), EncodeWireText(g.name), EncodeWireText(me.nickName)}));
+            } else if (r.status == 1) {             // 已入群，通知群在线成员刷新（可选）；结果给自己
+                g_sessions.PushTo(curUser, Pack("GROUP_RESULT_PUSH", {std::to_string(r.reqId),
+                    std::to_string(r.groupId), EncodeWireText(g.name), "1"}));
+            }
+            return Pack("GROUP_INVITE_ACK_RESP", {"0"});
+        }
+        case Cmd::kGroupApprove: {                      // GROUP_APPROVE|reqId|accept
+            if (!curUser) return AuthError("GROUP_APPROVE_RESP");
+            long long reqId = t.size() > 1 ? _atoi64(t[1].c_str()) : 0;
+            bool accept = t.size() > 2 && atoi(t[2].c_str()) != 0;
+            GroupReqInfo r;
+            int status = g_db.ResolveApprove(reqId, curUser, accept, r);
+            if (status != 0) return Pack("GROUP_APPROVE_RESP", {std::to_string(status)});
+            GroupInfo g; g_db.GetGroup(r.groupId, g);
+            g_sessions.PushTo(r.targetId, Pack("GROUP_RESULT_PUSH", {std::to_string(r.reqId),
+                std::to_string(r.groupId), EncodeWireText(g.name), std::to_string(r.status)}));
+            return Pack("GROUP_APPROVE_RESP", {"0"});
+        }
+        case Cmd::kGroupSync: {                         // GROUP_SYNC
+            if (!curUser) return AuthError("GROUP_SYNC_RESP");
+            for (auto& r : g_db.GetPendingInvites(curUser))
+                conn->SendLine(Pack("GROUP_INVITE_PUSH", {std::to_string(r.reqId), std::to_string(r.groupId),
+                    EncodeWireText(r.groupName), EncodeWireText(r.inviterNick)}));
+            for (auto& r : g_db.GetPendingApprovals(curUser))
+                conn->SendLine(Pack("GROUP_APPLY_PUSH", {std::to_string(r.reqId), std::to_string(r.groupId),
+                    EncodeWireText(r.groupName), EncodeWireText(r.targetNick)}));
+            for (auto& r : g_db.GetUnackedGroupResults(curUser))
+                conn->SendLine(Pack("GROUP_RESULT_PUSH", {std::to_string(r.reqId), std::to_string(r.groupId),
+                    EncodeWireText(r.groupName), std::to_string(r.status)}));
+            return Pack("GROUP_SYNC_RESP", {"0"});
+        }
+        case Cmd::kGroupResultSeen:
+            if (!curUser) return AuthError("GROUP_RESULT_SEEN_RESP");
+            return Pack("GROUP_RESULT_SEEN_RESP", {
+                g_db.AckGroupResult(t.size() > 1 ? _atoi64(t[1].c_str()) : 0, curUser) ? "0" : "3"});
+        case Cmd::kGroupChat: {                         // GROUP_CHAT|groupId|clientMsgId|contentB64
+            if (!curUser) return AuthError("GROUP_CHAT_ACK");
+            std::string clientId = t.size() > 2 ? t[2] : "0";
+            long long gid = t.size() > 1 ? _atoi64(t[1].c_str()) : 0;
+            std::string content;
+            if (!DecodeField(t, 3, content, 2000) || content.empty() || !g_db.IsGroupMember(curUser, gid))
+                return Pack("GROUP_CHAT_ACK", {"1", clientId, EncodeWireText("非群成员或空消息")});
+            long long id = g_db.SaveGroupMessage(gid, curUser, 1, content, 0);
+            GroupMessageInfo gm;
+            if (!id || !g_db.GetGroupMessageById(id, gm)) return Pack("GROUP_CHAT_ACK", {"5", clientId});
+            PushGroupMessage(gm, curUser);
+            return Pack("GROUP_CHAT_ACK", {"0", clientId, std::to_string(gm.msgId), EncodeWireText(gm.sendTime)});
+        }
+        case Cmd::kGroupHistory: {                      // GROUP_HISTORY|groupId|before|limit|reqId
+            if (!curUser) return AuthError("GROUP_HISTORY_BEGIN");
+            if (t.size() < 5) return Pack("GROUP_HISTORY_BEGIN", {"1", "0", "0", "0"});
+            long long gid = _atoi64(t[1].c_str()); long long before = _atoi64(t[2].c_str());
+            int limit = atoi(t[3].c_str()); std::string reqId = t[4];
+            if (!g_db.IsGroupMember(curUser, gid)) return Pack("GROUP_HISTORY_BEGIN", {"2", reqId, std::to_string(gid), "0"});
+            auto msgs = g_db.GetGroupConversation(gid, before, limit);
+            conn->SendLine(Pack("GROUP_HISTORY_BEGIN", {"0", reqId, std::to_string(gid), std::to_string(msgs.size())}));
+            for (auto& m : msgs) {
+                std::vector<std::string> item = {reqId};
+                for (auto& s : GroupMsgBody(m)) item.push_back(s);
+                conn->SendLine(Pack("GROUP_HISTORY_ITEM", item));
+            }
+            bool more = !msgs.empty() && (int)msgs.size() >= (limit > 50 ? 50 : limit);
+            return Pack("GROUP_HISTORY_END", {reqId, more ? "1" : "0",
+                msgs.empty() ? "0" : std::to_string(msgs.front().msgId)});
         }
         case Cmd::kVersion: return Pack("VERSION_RESP", {kAppVersion});
         case Cmd::kHeartbeat: return Pack("PONG", {});

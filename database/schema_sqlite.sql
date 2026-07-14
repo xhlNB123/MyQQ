@@ -84,6 +84,59 @@ CREATE TABLE IF NOT EXISTS Files (
     CreatedTime TEXT DEFAULT (datetime('now','localtime'))
 );
 
+-- ---------- 群聊 ----------
+CREATE TABLE IF NOT EXISTS Groups (
+    GroupId        INTEGER PRIMARY KEY AUTOINCREMENT,
+    GroupName      TEXT NOT NULL,
+    OwnerId        INTEGER NOT NULL,
+    RequireApproval INTEGER NOT NULL DEFAULT 0,   -- 0 直接进 1 需群主审批
+    CreatedTime    TEXT DEFAULT (datetime('now','localtime'))
+);
+-- 群号从 200001 起（与 QQ 号 10001 明显区分）
+INSERT INTO sqlite_sequence(name, seq)
+    SELECT 'Groups', 200000
+    WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name='Groups');
+
+CREATE TABLE IF NOT EXISTS GroupMembers (
+    GroupId  INTEGER NOT NULL,
+    UserId   INTEGER NOT NULL,
+    Role     INTEGER NOT NULL DEFAULT 0,          -- 0 成员 1 群主
+    JoinTime TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE(GroupId, UserId)
+);
+
+CREATE TABLE IF NOT EXISTS GroupMessages (
+    MsgId    INTEGER PRIMARY KEY AUTOINCREMENT,
+    GroupId  INTEGER NOT NULL,
+    SenderId INTEGER NOT NULL,
+    TypeId   INTEGER NOT NULL,                    -- 1 文本 5 图片 6 文件
+    Content  TEXT NOT NULL,
+    FileId   INTEGER,
+    SendTime TEXT DEFAULT (datetime('now','localtime'))
+);
+
+-- 入群请求（申请或邀请）
+CREATE TABLE IF NOT EXISTS GroupRequests (
+    ReqId       INTEGER PRIMARY KEY AUTOINCREMENT,
+    GroupId     INTEGER NOT NULL,
+    TargetId    INTEGER NOT NULL,                 -- 将加入的用户
+    InviterId   INTEGER NOT NULL DEFAULT 0,       -- 0=自己申请，>0=邀请人
+    NeedInviteeOk INTEGER NOT NULL DEFAULT 0,     -- 邀请场景需被邀请人同意
+    NeedOwnerOk INTEGER NOT NULL DEFAULT 0,       -- 需群主审批
+    InviteeOk   INTEGER NOT NULL DEFAULT 0,
+    OwnerOk     INTEGER NOT NULL DEFAULT 0,
+    Status      INTEGER NOT NULL DEFAULT 0,       -- 0 待处理 1 完成入群 2 拒绝
+    ResultAck   INTEGER NOT NULL DEFAULT 0,
+    CreatedTime TEXT DEFAULT (datetime('now','localtime')),
+    HandledTime TEXT
+);
+
+CREATE INDEX IF NOT EXISTS IX_GroupMembers_User ON GroupMembers(UserId);
+CREATE INDEX IF NOT EXISTS IX_GroupMembers_Group ON GroupMembers(GroupId);
+CREATE INDEX IF NOT EXISTS IX_GroupMessages_GroupMsg ON GroupMessages(GroupId, MsgId);
+CREATE INDEX IF NOT EXISTS IX_GroupReq_Target ON GroupRequests(TargetId, Status);
+CREATE INDEX IF NOT EXISTS IX_GroupReq_Group ON GroupRequests(GroupId, Status);
+
 CREATE INDEX IF NOT EXISTS IX_Messages_SenderReceiverMsg
     ON Messages(SenderId, ReceiverId, MsgId);
 CREATE INDEX IF NOT EXISTS IX_Messages_ReceiverSenderMsg

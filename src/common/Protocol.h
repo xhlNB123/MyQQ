@@ -45,14 +45,29 @@ enum class Cmd {
     kSysMessage,        // 兼容旧系统消息
 
     // 文件/图片传输（分块）
-    kFileBegin,         // FILE_BEGIN|peerId|clientMsgId|kind|nameB64|totalBytes
+    kFileBegin,         // FILE_BEGIN|targetId|clientMsgId|kind|nameB64|totalBytes|scope(0好友1群)
     kFileChunk,         // FILE_CHUNK|fileId|seq|dataB64
     kFileEnd,           // FILE_END|fileId
     kFileGet,           // FILE_GET|fileId|requestId
 
     // 个人信息
     kGetProfile,      // GET_PROFILE
-    kUpdateProfile,   // UPDATE_PROFILE|nickB64|gender|starId|bloodId|signatureB64|avatarB64
+    kUpdateProfile,   // UPDATE_PROFILE|nickB64|gender|starId|bloodId|signatureB64|avatarB64|visibility
+    kViewProfile,     // VIEW_PROFILE|userId（查看他人，受可见性限制）
+
+    // 群聊
+    kGroupCreate,     // GROUP_CREATE|nameB64|requireApproval
+    kGroupSearch,     // GROUP_SEARCH|keywordB64（群号或群名）
+    kGroupList,       // GROUP_LIST（我加入的群）
+    kGroupMembers,    // GROUP_MEMBERS|groupId
+    kGroupApply,      // GROUP_APPLY|groupId（按群号申请）
+    kGroupInvite,     // GROUP_INVITE|groupId|friendId
+    kGroupInviteAck,  // GROUP_INVITE_ACK|reqId|accept
+    kGroupApprove,    // GROUP_APPROVE|reqId|accept（群主审批）
+    kGroupSync,       // GROUP_SYNC
+    kGroupResultSeen, // GROUP_RESULT_SEEN|reqId
+    kGroupChat,       // GROUP_CHAT|groupId|clientMsgId|contentB64
+    kGroupHistory,    // GROUP_HISTORY|groupId|beforeMsgId|limit|requestId
 
     // 系统
     kVersion,         // VERSION

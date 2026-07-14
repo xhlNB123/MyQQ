@@ -20,14 +20,18 @@ struct ClientChatMessage {
     CString fileName;
     long long fileSize = 0;
     CString localPath;      // 已下载到本地的路径（图片缓存/文件另存）
+    CString senderNick;     // 群消息用：发送者昵称
 };
 
 class CChatDlg : public CDialogEx {
 public:
     CChatDlg(int peerId, const CString& peerNick, CMainDlg* pMain, CWnd* pParent = nullptr);
+    // 群聊构造：isGroup=true，peerId 为 groupId，peerNick 为群名
+    CChatDlg(int groupId, const CString& groupName, CMainDlg* pMain, bool isGroup, CWnd* pParent = nullptr);
     ~CChatDlg() override;
     enum { IDD = IDD_CHAT_DIALOG };
     int PeerId() const { return peerId_; }
+    bool IsGroup() const { return isGroup_; }
     unsigned long long HistoryRequestId() const { return historyRequestId_; }
 
     void OnHistoryBegin(unsigned long long requestId, int count);
@@ -49,6 +53,7 @@ protected:
     afx_msg void OnSend();
     afx_msg void OnSendImage();
     afx_msg void OnSendFile();
+    afx_msg void OnMembers();     // 群成员（仅群聊）
     afx_msg void OnLoadOlder();
     afx_msg void OnShowVersion();
     afx_msg void OnContextMenu(CWnd*, CPoint);
@@ -69,9 +74,10 @@ private:
     int  TextWidth();                                // 正文可用宽度（像素）
     CString CacheDir() const;
 
-    int peerId_;
-    CString peerNick_;
+    int peerId_;            // 好友 userId 或群 groupId
+    CString peerNick_;      // 好友昵称 或 群名
     CMainDlg* main_;
+    bool isGroup_ = false;
     std::unique_ptr<myqq::ChatLogger> logger_;
     bool logWarningShown_ = false;
 
