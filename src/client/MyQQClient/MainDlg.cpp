@@ -42,7 +42,15 @@ void CMainDlg::OpenChatWith(int id,const CString& nick){auto it=chatWnds_.find(i
 void CMainDlg::OnChatClosed(int id){if(!destroyingChats_)chatWnds_.erase(id);}
 void CMainDlg::CloseChatWindows(){destroyingChats_=true;auto copy=chatWnds_;chatWnds_.clear();for(auto& p:copy)if(p.second&&IsWindow(p.second->GetSafeHwnd()))p.second->DestroyWindow();destroyingChats_=false;}
 void CMainDlg::OnProfile(){CProfileDlg d(this);profileDlg_=&d;g_ctx.net.Send(Pack("GET_PROFILE",{}));d.DoModal();profileDlg_=nullptr;CString self;self.Format(_T("%S  |  QQ号 %d  |  在线"),g_ctx.selfNick.c_str(),g_ctx.selfId);SetDlgItemText(IDC_MAIN_SELF_INFO,self);}
-void CMainDlg::OnSettings(){CSettingsDlg d(this);if(d.DoModal()!=IDOK||d.GetAction()==CSettingsDlg::None)return;logoutResult_=d.GetAction()==CSettingsDlg::SwitchAccount?ID_MAIN_SWITCH_ACCOUNT:ID_MAIN_EXIT_APP;logoutPending_=true;g_ctx.net.Send(Pack("LOGOUT",{}));}
+void CMainDlg::OnSettings(){
+ CSettingsDlg d(this);
+ if(d.DoModal()!=IDOK||d.GetAction()==CSettingsDlg::None)return;
+ INT_PTR result=d.GetAction()==CSettingsDlg::SwitchAccount?ID_MAIN_SWITCH_ACCOUNT:ID_MAIN_EXIT_APP;
+ // 通知服务端登出（切换账号保留 TCP 连接），不等待响应，直接结束主窗口。
+ if(g_ctx.net.IsConnected())g_ctx.net.Send(Pack("LOGOUT",{}));
+ if(result==ID_MAIN_EXIT_APP)g_ctx.net.Close();
+ FinishLogout(result);
+}
 void CMainDlg::FinishLogout(INT_PTR result){logoutPending_=false;CloseChatWindows();EndDialog(result);}
 void CMainDlg::OnFriendRequests(){CFriendRequestsDlg d(friendRequests_,this);requestsDlg_=&d;d.DoModal();requestsDlg_=nullptr;}
 void CMainDlg::UpdateRequestButton(){CString s;s.Format(_T("好友申请 (%d"),(int)friendRequests_.size());s+=_T(")");SetDlgItemText(IDC_FRIEND_REQUESTS_BTN,s);}

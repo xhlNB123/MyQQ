@@ -57,6 +57,9 @@ END_MESSAGE_MAP()
 BOOL CLoginDlg::OnInitDialog() {
     CDialogEx::OnInitDialog();
     SetWindowText(_T("MyQQ 登录"));
+    // 切换账号时 TCP 仍连着，接收线程要重新指向本登录窗口，否则登录响应会丢。
+    if (g_ctx.net.IsConnected())
+        g_ctx.net.SetNotifyWnd(GetSafeHwnd());
     return TRUE;
 }
 
