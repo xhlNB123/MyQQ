@@ -43,7 +43,7 @@ BOOL CGroupDlg::OnInitDialog(){
 void CGroupDlg::OnGroupList(const std::vector<std::string>& t){
     if(t.size()<2||t[1]!="0") return;
     mine_.DeleteAllItems(); mineIds_.clear(); mineNames_.clear();
-    for(size_t i=2; i+2<t.size(); i+=3){
+    for(size_t i=3; i+2<t.size(); i+=3){
         long long gid=_atoi64(t[i].c_str()); CString name=Dec(t[i+1]);
         int row=mine_.InsertItem(mine_.GetItemCount(),U8(t[i]));
         mine_.SetItemText(row,1,name);
@@ -54,7 +54,7 @@ void CGroupDlg::OnGroupList(const std::vector<std::string>& t){
 void CGroupDlg::OnGroupSearch(const std::vector<std::string>& t){
     if(t.size()<2||t[1]!="0"){ AfxMessageBox(_T("未找到群")); return; }
     found_.DeleteAllItems(); foundIds_.clear();
-    for(size_t i=2; i+3<t.size(); i+=4){
+    for(size_t i=3; i+3<t.size(); i+=4){
         int row=found_.InsertItem(found_.GetItemCount(),U8(t[i]));
         found_.SetItemText(row,1,Dec(t[i+1]));
         found_.SetItemText(row,2,U8(t[i+2]));

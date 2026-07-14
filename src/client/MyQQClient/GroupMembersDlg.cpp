@@ -34,7 +34,7 @@ BOOL CGroupMembersDlg::OnInitDialog(){
 void CGroupMembersDlg::OnMembers(const std::vector<std::string>& t){
     if(t.size()<3||t[1]!="0") return;
     list_.DeleteAllItems(); ids_.clear();
-    for(size_t i=3; i+2<t.size(); i+=3){
+    for(size_t i=4; i+2<t.size(); i+=3){
         int row=list_.InsertItem(list_.GetItemCount(),U8(t[i]));
         list_.SetItemText(row,1,Dec(t[i+1]));
         list_.SetItemText(row,2,t[i+2]=="1"?_T("群主"):_T("成员"));
