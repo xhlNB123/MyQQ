@@ -34,12 +34,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package-windows-x64.ps1
 myQQ/
 ├─ README.md                 本文件
 ├─ 项目开发计划.md            需求总结 + 工程工作流
-├─ CMakeLists.txt            构建 common/服务端/控制台客户端
+├─ CMakeLists.txt            构建 common/服务端/控制台客户端（MSVC 静态运行库）
 ├─ .gitignore
 │
 ├─ database/                 数据库脚本
 │   ├─ schema.sql            SQL Server 版建表（课程要求参考）
-│   ├─ schema_sqlite.sql     SQLite 版建表（服务端实际使用）
+│   ├─ schema_sqlite.sql     SQLite 版建表（服务端实际使用，含好友申请表）
 │   └─ seed.sql              字典表初始化数据
 │
 ├─ third_party/sqlite/       SQLite amalgamation（sqlite3.c/.h）
@@ -47,31 +47,43 @@ myQQ/
 ├─ src/
 │   ├─ common/               客户端与服务端共用
 │   │   ├─ Protocol.h        通信协议：命令字、端口、版本号
-│   │   ├─ Message.h/.cpp    消息打包/解包
+│   │   ├─ Message.h/.cpp    消息打包/解包 + Base64URL 编解码
 │   │   ├─ Socket.h/.cpp     Winsock TCP 封装 + 本机 IP 查询
-│   │   └─ ChatLogger.h/.cpp 聊天记录写文件
+│   │   ├─ PathUtils.h       可执行文件目录定位（数据/日志相对 exe）
+│   │   └─ ChatLogger.h/.cpp 聊天记录本地备份
 │   │
-│   ├─ server/
-│   │   ├─ ServerMain.cpp    控制台服务端（协议分发 + 业务逻辑）
+│   ├─ server/               控制台服务端
+│   │   ├─ ServerMain.cpp    协议分发 + 业务逻辑
 │   │   ├─ Database.h/.cpp   SQLite 数据访问层
-│   │   └─ SessionManager.h/.cpp  在线用户会话管理（消息转发）
+│   │   └─ SessionManager.*  在线会话管理与消息转发
 │   │
 │   └─ client/
-│       ├─ README.md         MFC 客户端类划分说明
-│       └─ ConsoleClient.cpp 控制台测试客户端（含接收线程）
+│       ├─ README.md         MFC 客户端说明
+│       ├─ ConsoleClient.cpp 控制台测试客户端（协议联调）
+│       └─ MyQQClient/       MFC GUI 工程（.sln 在此）
+│           ├─ MyQQClient.sln / .vcxproj / .rc / resource.h
+│           ├─ MyQQClientApp / pch
+│           ├─ LoginDlg / RegisterDlg / MainDlg / ChatDlg
+│           ├─ ProfileDlg（个性化设置）/ SettingsDlg（设置）
+│           ├─ VerifyDlg（好友验证）/ FriendRequestsDlg（好友申请）
+│           ├─ NetClient（接收线程 + 消息队列）
+│           └─ AppContext（跨窗体共享连接与登录态）
 │
-├─ resources/                头像等资源
-│   └─ avatars/
+├─ scripts/                  发布打包
+│   ├─ package-windows-x64.ps1   一键生成自包含 Release zip
+│   └─ package-assets/           启动脚本 + 部署说明
 │
-├─ docs/                     阶段文档（对应瀑布模型各阶段交付物）
-│   ├─ 01_需求分析/
-│   ├─ 02_设计文档/
-│   ├─ 03_测试报告/
-│   ├─ 04_设计报告/
-│   └─ 流程图/
+├─ docs/                     文档
+│   ├─ 02_设计文档/通信协议设计.md
+│   ├─ 客户端使用说明书.md
+│   ├─ 服务端说明与测试指南.md
+│   ├─ 部署与发布说明.md
+│   └─ 课程原始材料/          课程 PPT / PDF
 │
-└─ build/                    构建输出（git 忽略）
+└─ resources/                预留资源目录（头像等）
 ```
+
+> 说明：`build/`、`out/`、`dist/`、`.vs/`、`x64/`、`myqq.db`、`logs/` 均为构建/运行产物，已在 `.gitignore` 忽略，克隆后重新编译即可生成。
 
 ## 快速开始（服务端 + 控制台客户端）
 ```bash
