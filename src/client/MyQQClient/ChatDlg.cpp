@@ -202,27 +202,49 @@ void CChatDlg::EnsureThumb(const ClientChatMessage& m){
 }
 
 // ---------------- 自绘 ----------------
+// 正文的绘制格式（换行统一 \n，去掉 \r，避免 DrawText 多算空行）
+static CString NormalizeText(const CString& s){ CString r(s); r.Replace(_T("\r\n"),_T("\n")); r.Replace(_T("\r"),_T("\n")); return r; }
+
+// 正文可用宽度（像素）：列表客户区宽减去左右边距
+int CChatDlg::TextWidth(){
+    if(!msgList_.GetSafeHwnd()) return 240;
+    CRect lr; msgList_.GetClientRect(&lr);
+    int w=lr.Width()-16; return w<60?60:w;
+}
+
 void CChatDlg::OnMeasureItem(int id,LPMEASUREITEMSTRUCT mis){
     if(id==IDC_CHAT_HISTORY && mis->itemID<order_.size()){
         const auto& m=messages_[order_[mis->itemID]];
         if(m.kind==kKindImage) mis->itemHeight=175;
-        else if(m.kind==kKindFile) mis->itemHeight=52;
-        else { int lines=1; for(int i=0;i<m.content.GetLength();++i) if(m.content[i]==_T('\n')) lines++;
-               int h=22+lines*16; mis->itemHeight=h>220?220:h; }
+        else if(m.kind==kKindFile) mis->itemHeight=48;
+        else {
+            CClientDC dc(&msgList_);
+            HFONT f=(HFONT)msgList_.SendMessage(WM_GETFONT,0,0);
+            HGDIOBJ old = f ? dc.SelectObject(f) : nullptr;
+            CString body=NormalizeText(m.content);
+            CRect tr(0,0,TextWidth(),0);
+            dc.DrawText(body,&tr,DT_LEFT|DT_WORDBREAK|DT_CALCRECT|DT_NOPREFIX);
+            if(old) dc.SelectObject(old);
+            int h=20 + tr.Height() + 8;         // 头部行 + 正文 + 边距
+            if(h<40) h=40; if(h>400) h=400;
+            mis->itemHeight=h;
+        }
     } else mis->itemHeight=20;
     CDialogEx::OnMeasureItem(id,mis);
 }
 void CChatDlg::OnDrawItem(int id,LPDRAWITEMSTRUCT dis){
     if(id!=IDC_CHAT_HISTORY || dis->itemID>=order_.size()){ CDialogEx::OnDrawItem(id,dis); return; }
     CDC dc; dc.Attach(dis->hDC); CRect rc(dis->rcItem);
+    HFONT f=(HFONT)msgList_.SendMessage(WM_GETFONT,0,0);
+    HGDIOBJ oldFont = f ? dc.SelectObject(f) : nullptr;
     dc.FillSolidRect(&rc, GetSysColor(COLOR_WINDOW));
     const auto& m=messages_[order_[dis->itemID]];
     bool mine=(m.senderId==g_ctx.selfId);
     CString who=mine?_T("我"):(peerNick_.IsEmpty()?_T("对方"):peerNick_);
     CString head; head.Format(_T("[%s] %s"),m.sendTime.GetString(),who.GetString());
     dc.SetBkMode(TRANSPARENT); dc.SetTextColor(RGB(120,120,120));
-    dc.TextOut(rc.left+6,rc.top+2,head);
-    int y=rc.top+18;
+    dc.TextOut(rc.left+8,rc.top+3,head);
+    int y=rc.top+20;
     if(m.kind==kKindImage){
         auto it=thumbs_.find(m.msgId);
         if(it!=thumbs_.end()){
@@ -237,9 +259,11 @@ void CChatDlg::OnDrawItem(int id,LPDRAWITEMSTRUCT dis){
         dc.TextOut(rc.left+8,y,line);
     } else {
         dc.SetTextColor(RGB(0,0,0));
-        CRect tr(rc.left+8,y,rc.right-6,rc.bottom-2);
-        dc.DrawText(m.content,&tr,DT_LEFT|DT_WORDBREAK|DT_EDITCONTROL);
+        CString body=NormalizeText(m.content);
+        CRect tr(rc.left+8,y,rc.left+8+TextWidth(),rc.bottom-2);
+        dc.DrawText(body,&tr,DT_LEFT|DT_WORDBREAK|DT_NOPREFIX);
     }
+    if(oldFont) dc.SelectObject(oldFont);
     dc.Detach();
 }
 void CChatDlg::OnDblClkList(){

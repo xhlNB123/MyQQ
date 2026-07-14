@@ -66,6 +66,7 @@ private:
     void StartUpload(const CString& path, int kind);
     void EnsureImageDownloaded(const ClientChatMessage& m);
     void EnsureThumb(const ClientChatMessage& m);   // 已下载则生成缩略图
+    int  TextWidth();                                // 正文可用宽度（像素）
     CString CacheDir() const;
 
     int peerId_;
